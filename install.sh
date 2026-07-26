@@ -39,7 +39,7 @@ const { io } = require("socket.io-client");
 const fs = require("fs");
 const { execSync } = require("child_process");
 
-const VPS_URL = "GANTI_DENGAN_URL_NGROK_LU"; 
+const VPS_URL = "https://predict-banked-exclusive.ngrok-free.dev"; 
 
 let DEVICE_ID = "";
 const idFile = "device_id.txt";
