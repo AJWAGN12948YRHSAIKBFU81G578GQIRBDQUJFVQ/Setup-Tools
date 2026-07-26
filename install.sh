@@ -1,19 +1,29 @@
+#!/bin/bash
 
 GREEN='\033[0;32m'
 NC='\033[0m'
 
 echo -e "${GREEN}=== Tinkerbell Bridge Installer ===${NC}"
-echo "Installing required packages..."
+echo "Updating packages..."
+pkg update -y
+pkg upgrade -y
 
-pkg update -y > /dev/null 2>&1
-pkg install nodejs -y > /dev/null 2>&1
+echo "Installing Node.js..."
+pkg install nodejs -y
 
-mkdir -p ~/tinkerbell-bridge
-cd ~/tinkerbell-bridge
+echo "Setting up storage..."
+termux-setup-storage
 
-echo "Setting up bridge environment..."
-npm init -y > /dev/null 2>&1
-npm install socket.io-client > /dev/null 2>&1
+echo "Creating bridge folder..."
+cd ~
+mkdir -p tinkerbell-bridge
+cd tinkerbell-bridge
+
+echo "Initializing NPM..."
+npm init -y
+
+echo "Installing Socket.io Client..."
+npm install socket.io-client
 
 if [ ! -f device_id.txt ]; then
     MODEL=$(getprop ro.product.model | tr ' ' '-')
@@ -26,7 +36,7 @@ const { io } = require("socket.io-client");
 const fs = require("fs");
 const { execSync } = require("child_process");
 
-const VPS_URL = "https://predict-banked-exclusive.ngrok-free.dev"; 
+const VPS_URL = "GANTI_DENGAN_URL_NGROK_LU"; 
 
 let DEVICE_ID = "";
 const idFile = "device_id.txt";
