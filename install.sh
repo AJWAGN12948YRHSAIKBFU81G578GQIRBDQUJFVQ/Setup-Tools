@@ -3,13 +3,16 @@
 GREEN='\033[0;32m'
 NC='\033[0m'
 
+export DEBIAN_FRONTEND=noninteractive
+
 echo -e "${GREEN}=== Tinkerbell Bridge Installer ===${NC}"
-echo "Updating packages..."
+echo "Fixing & Updating packages..."
+dpkg --configure -a
 pkg update -y
-pkg upgrade -y
+pkg upgrade -y -o Dpkg::Options::="--force-confold"
 
 echo "Installing Node.js..."
-pkg install nodejs -y
+pkg install nodejs -y -o Dpkg::Options::="--force-confold"
 
 echo "Setting up storage..."
 termux-setup-storage
