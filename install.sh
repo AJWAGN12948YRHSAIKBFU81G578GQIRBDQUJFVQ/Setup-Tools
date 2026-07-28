@@ -4,15 +4,13 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-LICENSE_KEY=$1
+echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+echo "Please enter your License Key from the Dashboard:"
+read -p "Key: " LICENSE_KEY < /dev/tty
 
-if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
-    echo "Please enter your License Key from the Dashboard:"
-    read -p "Key: " LICENSE_KEY
-fi
-
+# Hapus spasi kalau user sengaja nggak sengaja kepencet spasi
 LICENSE_KEY=$(echo $LICENSE_KEY | tr -d ' ')
+
 if [[ ! "$LICENSE_KEY" =~ ^TINKERBELL-[A-Z0-9]{4}-[A-Z0-9]{4}$ ]]; then
     echo -e "${RED}Invalid Key Format. It should look like TINKERBELL-XXXX-XXXX${NC}"
     exit 1
@@ -22,8 +20,8 @@ echo -e "${GREEN}=== Cleaning Previous Installation ===${NC}"
 rm -rf ~/tinkerbell-bridge
 
 echo -e "${GREEN}=== Installing Required Packages ===${NC}"
-pkg update -y > /dev/null 2>&1
-pkg install nodejs -y > /dev/null 2>&1
+pkg update -y
+pkg install nodejs -y
 
 echo -e "${GREEN}=== Setting Up Bridge Environment ===${NC}"
 cd ~
@@ -37,7 +35,7 @@ cat << EOF > bridge.js
 const { io } = require("socket.io-client");
 const { execSync } = require("child_process");
 
-const VPS_URL = "https://predict-banked-exclusive.ngrok-free.dev"; 
+const VPS_URL = "https://LINK_NGROK_BARU_LU.ngrok-free.app"; 
 const LICENSE_KEY = "$LICENSE_KEY";
 
 let model = "Unknown";
@@ -61,10 +59,7 @@ const socket = io(VPS_URL, {
 
 socket.on("connect", () => {
     console.log("[✓] Connected to Dashboard!");
-    socket.emit("device_connect", {
-        ip: "Cloud Phone",
-        maxPackages: 10
-    });
+    socket.emit("device_connect", { ip: "Cloud Phone", maxPackages: 10 });
 });
 
 socket.on("connect_error", (err) => {
@@ -77,16 +72,10 @@ socket.on("connect_error", (err) => {
 
 socket.on("execute_command", (data) => {
     console.log(\`[CMD] Received: \${data.command}\`);
-    socket.emit("device_log", {
-        deviceId: DEVICE_ID,
-        message: \`Command \${data.command} executed!\`,
-        type: "success"
-    });
+    socket.emit("device_log", { deviceId: DEVICE_ID, message: \`Command \${data.command} executed!\`, type: "success" });
 });
 
-socket.on("disconnect", () => {
-    console.log("Disconnected. Reconnecting...");
-});
+socket.on("disconnect", () => { console.log("Disconnected. Reconnecting..."); });
 EOF
 
 echo -e "${GREEN}=== Starting Tinkerbell Bridge ===${NC}"
