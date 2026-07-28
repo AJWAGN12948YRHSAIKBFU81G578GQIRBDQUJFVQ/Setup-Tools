@@ -8,7 +8,6 @@ echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
 echo "Please enter your License Key from the Dashboard:"
 read -p "Key: " LICENSE_KEY < /dev/tty
 
-# Hapus spasi kalau user sengaja nggak sengaja kepencet spasi
 LICENSE_KEY=$(echo $LICENSE_KEY | tr -d ' ')
 
 if [[ ! "$LICENSE_KEY" =~ ^TINKERBELL-[A-Z0-9]{4}-[A-Z0-9]{4}$ ]]; then
@@ -35,7 +34,7 @@ cat << EOF > bridge.js
 const { io } = require("socket.io-client");
 const { execSync } = require("child_process");
 
-const VPS_URL = "https://LINK_NGROK_BARU_LU.ngrok-free.app"; 
+const VPS_URL = "https://predict-banked-exclusive.ngrok-free.dev "; 
 const LICENSE_KEY = "$LICENSE_KEY";
 
 let model = "Unknown";
