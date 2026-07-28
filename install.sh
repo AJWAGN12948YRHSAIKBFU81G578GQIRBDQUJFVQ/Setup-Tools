@@ -20,7 +20,7 @@ rm -rf ~/tinkerbell-bridge
 
 echo -e "${GREEN}=== Installing Required Packages ===${NC}"
 pkg update -y
-pkg install nodejs -y
+pkg install nodejs-lts -y
 
 echo -e "${GREEN}=== Setting Up Bridge Environment ===${NC}"
 cd ~
