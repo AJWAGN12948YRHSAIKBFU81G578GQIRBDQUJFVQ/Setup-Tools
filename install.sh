@@ -17,6 +17,9 @@ if [[ ! "$LICENSE_KEY" =~ ^TINKERBELL-[A-Z0-9]{4}-[A-Z0-9]{4}$ ]]; then
     exit 1
 fi
 
+echo -e "${GREEN}=== Cleaning Previous Installation ===${NC}"
+rm -rf ~/tinkerbell-bridge
+
 echo -e "${GREEN}=== Installing Required Packages ===${NC}"
 pkg update -y > /dev/null 2>&1
 pkg install nodejs -y > /dev/null 2>&1
@@ -29,36 +32,24 @@ cd tinkerbell-bridge
 npm init -y > /dev/null 2>&1
 npm install socket.io-client > /dev/null 2>&1
 
-if [ ! -f device_id.txt ]; then
-    MODEL=$(getprop ro.product.model | tr ' ' '-')
-    RAND=$(shuf -i 1000-9999 -n 1)
-    echo "${MODEL}-${RAND}" > device_id.txt
-fi
-
 cat << EOF > bridge.js
 const { io } = require("socket.io-client");
-const fs = require("fs");
 const { execSync } = require("child_process");
 
 const VPS_URL = "https://predict-banked-exclusive.ngrok-free.dev"; 
 const LICENSE_KEY = "$LICENSE_KEY";
 
-let DEVICE_ID = "";
-const idFile = "device_id.txt";
+let model = "Unknown";
+let serial = "Unknown";
+let androidId = "Unknown";
 
-if (fs.existsSync(idFile)) {
-    DEVICE_ID = fs.readFileSync(idFile, "utf8").trim();
-} else {
-    let model = "RF-Device";
-    try {
-        model = execSync("getprop ro.product.model").toString().trim().replace(/\s+/g, "-");
-    } catch (e) {}
-    const randomSuffix = Math.floor(Math.random() * 9000 + 1000);
-    DEVICE_ID = \`\${model}-\${randomSuffix}\`;
-    fs.writeFileSync(idFile, DEVICE_ID);
-}
+try { model = execSync("getprop ro.product.model").toString().trim(); } catch (e) {}
+try { serial = execSync("getprop ro.serialno").toString().trim(); } catch (e) {}
+try { androidId = execSync("settings get secure android_id").toString().trim(); } catch (e) {}
 
-console.log("Device ID: " + DEVICE_ID);
+const DEVICE_ID = \`\${model}-\${serial}-\${androidId}\`;
+
+console.log("Hardware ID: " + DEVICE_ID);
 console.log("Connecting to Tinkerbell Dashboard...");
 
 const socket = io(VPS_URL, {
