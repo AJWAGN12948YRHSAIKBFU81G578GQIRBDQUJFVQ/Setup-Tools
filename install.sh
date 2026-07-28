@@ -1,32 +1,33 @@
 #!/bin/bash
 
 GREEN='\033[0;32m'
+RED='\033[0;31m'
 NC='\033[0m'
 
-export DEBIAN_FRONTEND=noninteractive
+LICENSE_KEY=$1
 
-echo -e "${GREEN}=== Tinkerbell Bridge Installer ===${NC}"
-echo "Fixing & Updating packages..."
-dpkg --configure -a
-pkg update -y
-pkg upgrade -y -o Dpkg::Options::="--force-confold"
+if [ -z "$LICENSE_KEY" ]; then
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+    echo "Please enter your License Key from the Dashboard:"
+    read -p "Key: " LICENSE_KEY
+fi
 
-echo "Installing Node.js..."
-pkg install nodejs -y -o Dpkg::Options::="--force-confold"
+if [[ ! "$LICENSE_KEY" =~ ^TINKERBELL-[A-Z0-9]{4}-[A-Z0-9]{4}$ ]]; then
+    echo -e "${RED}Invalid Key Format. It should look like TINKERBELL-XXXX-XXXX${NC}"
+    exit 1
+fi
 
-echo "Setting up storage..."
-termux-setup-storage
+echo -e "${GREEN}=== Installing Required Packages ===${NC}"
+pkg update -y > /dev/null 2>&1
+pkg install nodejs -y > /dev/null 2>&1
 
-echo "Creating bridge folder..."
+echo -e "${GREEN}=== Setting Up Bridge Environment ===${NC}"
 cd ~
 mkdir -p tinkerbell-bridge
 cd tinkerbell-bridge
 
-echo "Initializing NPM..."
-npm init -y
-
-echo "Installing Socket.io Client..."
-npm install socket.io-client
+npm init -y > /dev/null 2>&1
+npm install socket.io-client > /dev/null 2>&1
 
 if [ ! -f device_id.txt ]; then
     MODEL=$(getprop ro.product.model | tr ' ' '-')
@@ -34,12 +35,13 @@ if [ ! -f device_id.txt ]; then
     echo "${MODEL}-${RAND}" > device_id.txt
 fi
 
-cat << 'EOF' > bridge.js
+cat << EOF > bridge.js
 const { io } = require("socket.io-client");
 const fs = require("fs");
 const { execSync } = require("child_process");
 
 const VPS_URL = "https://predict-banked-exclusive.ngrok-free.dev"; 
+const LICENSE_KEY = "$LICENSE_KEY";
 
 let DEVICE_ID = "";
 const idFile = "device_id.txt";
@@ -52,7 +54,7 @@ if (fs.existsSync(idFile)) {
         model = execSync("getprop ro.product.model").toString().trim().replace(/\s+/g, "-");
     } catch (e) {}
     const randomSuffix = Math.floor(Math.random() * 9000 + 1000);
-    DEVICE_ID = `${model}-${randomSuffix}`;
+    DEVICE_ID = \`\${model}-\${randomSuffix}\`;
     fs.writeFileSync(idFile, DEVICE_ID);
 }
 
@@ -61,30 +63,43 @@ console.log("Connecting to Tinkerbell Dashboard...");
 
 const socket = io(VPS_URL, {
     reconnection: true,
+    reconnectionDelay: 2000,
+    auth: { licenseKey: LICENSE_KEY, deviceId: DEVICE_ID }
 });
 
 socket.on("connect", () => {
     console.log("[✓] Connected to Dashboard!");
     socket.emit("device_connect", {
-        deviceId: DEVICE_ID,
         ip: "Cloud Phone",
         maxPackages: 10
     });
 });
 
+socket.on("connect_error", (err) => {
+    console.log("[!] Connection Failed: " + err.message);
+    if (err.message.includes("Authentication failed") || err.message.includes("Invalid License Key") || err.message.includes("Device limit reached") || err.message.includes("License not activated")) {
+        console.log("[!] Please check your License Key or reset it from the dashboard.");
+        process.exit(1);
+    }
+});
+
 socket.on("execute_command", (data) => {
-    console.log(`[CMD] Received: ${data.command}`);
+    console.log(\`[CMD] Received: \${data.command}\`);
     socket.emit("device_log", {
         deviceId: DEVICE_ID,
-        message: `Command ${data.command} executed!`,
+        message: \`Command \${data.command} executed!\`,
         type: "success"
     });
 });
 
 socket.on("disconnect", () => {
-    console.log("Disconnected...");
+    console.log("Disconnected. Reconnecting...");
 });
 EOF
 
-echo -e "${GREEN}Starting Tinkerbell Bridge...${NC}"
-node bridge.js
+echo -e "${GREEN}=== Starting Tinkerbell Bridge ===${NC}"
+while true; do
+    node bridge.js
+    echo "[!] Connection lost. Reconnecting in 5 seconds..."
+    sleep 5
+done
