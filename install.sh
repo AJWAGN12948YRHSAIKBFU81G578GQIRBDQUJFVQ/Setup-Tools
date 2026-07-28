@@ -34,7 +34,7 @@ cat << EOF > bridge.js
 const { io } = require("socket.io-client");
 const { execSync } = require("child_process");
 
-const VPS_URL = "https://predict-banked-exclusive.ngrok-free.dev "; 
+const VPS_URL = "https://predict-banked-exclusive.ngrok-free.dev"; 
 const LICENSE_KEY = "$LICENSE_KEY";
 
 let model = "Unknown";
