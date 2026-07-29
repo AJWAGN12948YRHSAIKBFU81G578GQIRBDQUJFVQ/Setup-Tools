@@ -44,20 +44,23 @@ npm install socket.io-client > /dev/null 2>&1
 
 cat << EOF > bridge.js
 const { io } = require("socket.io-client");
-const { execSync } = require("child_process");
+const { exec, execSync } = require("child_process");
+const fs = require("fs");
 
 const VPS_URL = "$VPS_URL"; 
 const LICENSE_KEY = "$LICENSE_KEY";
 
 let model = "Unknown";
 let serial = "Unknown";
-let androidId = "Unknown";
 
 try { model = execSync("getprop ro.product.model").toString().trim(); } catch (e) {}
 try { serial = execSync("getprop ro.serialno").toString().trim(); } catch (e) {}
-try { androidId = execSync("settings get secure android_id").toString().trim(); } catch (e) {}
 
-const DEVICE_ID = model + "-" + serial + "-" + androidId;
+if (serial === "" || serial === "unknown") {
+    try { serial = execSync("getprop ro.boot.serialno").toString().trim(); } catch (e) {}
+}
+
+const DEVICE_ID = model + "-" + serial;
 
 console.log("Hardware ID: " + DEVICE_ID);
 console.log("Connecting to Tinkerbell Dashboard...");
@@ -80,32 +83,29 @@ socket.on("connect_error", (err) => {
     }
 });
 
+const runCmd = (cmd) => {
+    exec(cmd, (error, stdout, stderr) => {
+        if (error) console.log("Cmd error: " + error.message.split("\n")[0]);
+    });
+};
+
 socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
-    
-    const { exec, execSync } = require("child_process");
-    const fs = require("fs");
-    
-    const runCmd = (cmd) => {
-        exec(cmd, (error, stdout, stderr) => {
-            if (error) console.log("Cmd error: " + error.message);
-        });
-    };
 
     if (data.command === 'clean_device') {
         console.log("Cleaning device & setting up...");
         
-        runCmd("su -c 'settings put global enable_freeform_support 1'");
-        runCmd("su -c 'settings put global force_resizable_activities 1'");
-        runCmd("su -c 'settings put global allow_non_resizable_multi_window 1'");
-        runCmd("su -c 'wm density 640'");
+        runCmd('su -c "settings put global enable_freeform_support 1"');
+        runCmd('su -c "settings put global force_resizable_activities 1"');
+        runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
+        runCmd('su -c "wm density 640"');
         
-        exec("su -c 'pm list packages -3'", (err, stdout) => {
+        exec('su -c "pm list packages -3"', (err, stdout) => {
             if (!err && stdout) {
                 stdout.trim().split('\n').forEach(pkgLine => {
                     const pkg = pkgLine.replace('package:', '').trim();
                     if (pkg && pkg !== 'com.termux') {
-                        runCmd("su -c 'pm uninstall -k --user 0 " + pkg + "'");
+                        runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
                     }
                 });
             }
@@ -115,8 +115,7 @@ socket.on("execute_command", (data) => {
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
-        runCmd("su -c 'setprop sys.powerctl reboot'");
-        runCmd("su -c 'am broadcast -a android.intent.action.REBOOT'");
+        runCmd('su -c "reboot"');
     }
     else if (data.command === 'reset_device') {
         console.log("Factory resetting device to fresh state...");
@@ -133,11 +132,11 @@ socket.on("execute_command", (data) => {
         "rm -rf /data/dalvik-cache/*\n" +
         "sleep 2\n" +
         "pm uninstall --user 0 com.termux\n" +
-        "setprop sys.powerctl reboot";
+        "reboot";
         
         try {
             fs.writeFileSync('/data/data/com.termux/files/home/wipe.sh', wipeScript);
-            runCmd("su -c 'nohup sh /data/data/com.termux/files/home/wipe.sh > /dev/null 2>&1 &'");
+            runCmd('su -c "sh /data/data/com.termux/files/home/wipe.sh"');
         } catch (e) {
             console.log("Failed to write wipe script: " + e.message);
         }
