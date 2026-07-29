@@ -4,7 +4,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${RED}=== Temempek ===${NC}"
+echo -e "${RED}=== PENTELLLL ===${NC}"
 echo "Please enter your License Key from the Dashboard:"
 read -p "Key: " LICENSE_KEY < /dev/tty
 
@@ -91,6 +91,18 @@ const runCmd = (cmd) => {
 
 socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
+    
+    const { execSync } = require("child_process");
+    const fs = require("fs");
+    
+    // FUNGSI SILENT BIAR NGGAK NGE-PRINT ERROR PAS HP MATI/REBOOT
+    const runCmd = (cmd) => {
+        try { 
+            execSync(cmd, { stdio: 'ignore' }); 
+        } catch (e) {
+            // Diem aja kalau gagal
+        }
+    };
 
     if (data.command === 'clean_device') {
         console.log("Cleaning device & setting up...");
@@ -100,22 +112,22 @@ socket.on("execute_command", (data) => {
         runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
         runCmd('su -c "wm density 640"');
         
-        exec('su -c "pm list packages -3"', (err, stdout) => {
-            if (!err && stdout) {
-                stdout.trim().split('\n').forEach(pkgLine => {
-                    const pkg = pkgLine.replace('package:', '').trim();
-                    if (pkg && pkg !== 'com.termux') {
-                        runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
-                    }
-                });
-            }
-        });
+        try {
+            const packages = execSync('su -c "pm list packages -3"', { encoding: 'utf8' }).trim().split('\n');
+            packages.forEach(pkgLine => {
+                const pkg = pkgLine.replace('package:', '').trim();
+                if (pkg && pkg !== 'com.termux') {
+                    runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
+                }
+            });
+        } catch (e) {}
 
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 640', type: "success" });
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
-        runCmd('su -c "reboot"');
+        // PAKAI SETPROP (SANGAT AMAN DI REDFINGER)
+        runCmd('su -c "setprop sys.powerctl reboot"');
     }
     else if (data.command === 'reset_device') {
         console.log("Factory resetting device to fresh state...");
@@ -132,7 +144,7 @@ socket.on("execute_command", (data) => {
         "rm -rf /data/dalvik-cache/*\n" +
         "sleep 2\n" +
         "pm uninstall --user 0 com.termux\n" +
-        "reboot";
+        "setprop sys.powerctl reboot";
         
         try {
             fs.writeFileSync('/data/data/com.termux/files/home/wipe.sh', wipeScript);
@@ -152,6 +164,13 @@ EOF
 echo -e "${GREEN}=== Starting Tinkerbell Bridge ===${NC}"
 while true; do
     node bridge.js
+    EXIT_CODE=$?
+    
+    if [ $EXIT_CODE -eq 1 ]; then
+        echo "[!] Script stopped due to device limit or invalid license."
+        break
+    fi
+    
     echo "[!] Connection lost. Reconnecting in 5 seconds..."
     sleep 5
 done
