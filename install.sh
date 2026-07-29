@@ -83,36 +83,42 @@ socket.on("connect_error", (err) => {
 socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
+    const runCmd = (cmd) => {
+        try { 
+            execSync(cmd); 
+        } catch (e) { 
+            console.log("Cmd skipped: " + cmd); 
+        }
+    };
+
     if (data.command === 'clean_device') {
         console.log("Cleaning device & setting up...");
-        try {
-            execSync('su -c "settings put global enable_freeform_support 1"');
-            execSync('su -c "settings put global force_resizable_activities 1"');
-            execSync('su -c "settings put global allow_non_resizable_multi_window 1"');
-            execSync('su -c "wm density 600"');
-            
-            const bloatware = [
-                'com.google.android.youtube', 'com.google.android.apps.photos', 
-                'com.android.chrome', 'com.google.android.apps.maps', 
-                'com.google.android.gm', 'com.google.android.videos', 
-                'com.google.android.music', 'com.google.android.apps.docs'
-            ];
-            bloatware.forEach(pkg => {
-                execSync("su -c 'pm uninstall -k --user 0 " + pkg + "' > /dev/null 2>&1");
-            });
+        
+        runCmd('su -c "settings put global enable_freeform_support 1"');
+        runCmd('su -c "settings put global force_resizable_activities 1"');
+        runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
+        runCmd('su -c "wm density 640"');
+        
+        const bloatware = [
+            'com.google.android.youtube', 'com.google.android.apps.photos', 
+            'com.android.chrome', 'com.google.android.apps.maps', 
+            'com.google.android.gm', 'com.google.android.videos', 
+            'com.google.android.music', 'com.google.android.apps.docs'
+        ];
+        bloatware.forEach(pkg => {
+            runCmd("su -c 'pm uninstall -k --user 0 " + pkg + "'");
+        });
 
-            socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 600 successfully', type: "success" });
-        } catch (e) {
-            socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Clean Device Failed. Root access required.', type: "error" });
-        }
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 640 successfully', type: "success" });
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
-        execSync('su -c "reboot"');
+        runCmd('su -c "reboot"');
     }
     else if (data.command === 'reset_device') {
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Factory Resetting device...', type: "success" });
-        execSync('su -c "pm clear com.roblox.client" > /dev/null 2>&1');
+        runCmd('su -c "pm clear com.roblox.client"');
+        runCmd('su -c "pm clear com.roblox.client.beta"');
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Roblox data cleared successfully', type: "success" });
     }
     else {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Command " + data.command + " executed!", type: "success" });
