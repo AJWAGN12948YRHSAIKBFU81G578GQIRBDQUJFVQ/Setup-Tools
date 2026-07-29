@@ -4,7 +4,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${RED}=== COCTZY ===${NC}"
+echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
 echo "Please enter your License Key from the Dashboard:"
 read -p "Key: " LICENSE_KEY < /dev/tty
 
@@ -104,16 +104,29 @@ socket.on("execute_command", (data) => {
     if (data.command === 'clean_device') {
         console.log("Cleaning device & setting up...");
         
-        // 1. ENABLE DEVELOPER OPTIONS SECARA PAKSA
         runCmd('su -c "settings put global development_settings_enabled 1"');
         runCmd('su -c "settings put global enable_freeform_support 1"');
         runCmd('su -c "settings put global force_resizable_activities 1"');
         runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
         
-        // 2. SET DPI JADI 640
-        runCmd('su -c "wm density 640"');
+        // 1. BACA RESOLUSI LAYAR REDFINGER
+        let targetDensity = 240; // Default fallback
+        try {
+            const sizeOutput = execSync('su -c "wm size"', { encoding: 'utf8' });
+            const match = sizeOutput.match(/(\d+)x(\d+)/);
+            if (match) {
+                const w = parseInt(match[1]);
+                const h = parseInt(match[2]);
+                const shortEdge = Math.min(w, h);
+                // 2. HITUNG DPI AGAR SMALLEST WIDTH = 600dp
+                targetDensity = Math.round((shortEdge / 600) * 160);
+            }
+        } catch (e) {}
         
-        // 3. UNINSTALL SEMUA APLIKASI 3RD PARTY
+        // 3. SET DPI HASIL HITUNGAN
+        runCmd('su -c "wm density ' + targetDensity + '"');
+        
+        // 4. UNINSTALL SEMUA APLIKASI 3RD PARTY
         try {
             const packages = execSync('su -c "pm list packages -3"', { encoding: 'utf8' }).trim().split('\n');
             packages.forEach(pkgLine => {
@@ -124,33 +137,33 @@ socket.on("execute_command", (data) => {
             });
         } catch (e) {}
 
-        // 4. DISABLE APLIKASI BAWAAN REDFINGER YANG BIKIN RISIH
+        // 5. DISABLE APLIKASI BAWAAN REDFINGER YANG BIKIN RISIH
         const disableApps = [
-            'com.android.inputmethod.latin', // AOSP Keyboard
-            'com.android.calendar',          // Calendar
-            'com.android.chrome',            // Chrome
-            'com.android.deskclock',         // Clock
-            'com.android.contacts',          // Contacts
-            'com.android.email',             // Email
-            'com.google.android.apps.nbu.files', // Files by google
-            'com.android.gallery3d',         // Gallery
-            'com.google.android.inputmethod.latin', // Gboard
-            'com.google.android.play.games', // Google Play Games
-            'com.android.vending',           // Google Play Store
-            'com.google.android.gms',        // Google Play Services
-            'com.android.quicksearchbox',    // Search
-            'com.android.messaging',         // Messaging
-            'com.android.dialer',            // Phone
-            'com.android.tools',             // Toolbox
-            'com.android.toolkit',           // Toolbox
-            'com.android.market'             // App Store
+            'com.android.inputmethod.latin', 
+            'com.android.calendar',          
+            'com.android.chrome',            
+            'com.android.deskclock',         
+            'com.android.contacts',          
+            'com.android.email',             
+            'com.google.android.apps.nbu.files',
+            'com.android.gallery3d',         
+            'com.google.android.inputmethod.latin',
+            'com.google.android.play.games', 
+            'com.android.vending',           
+            'com.google.android.gms',        
+            'com.android.quicksearchbox',    
+            'com.android.messaging',         
+            'com.android.dialer',            
+            'com.android.tools',             
+            'com.android.toolkit',           
+            'com.android.market'             
         ];
         
         disableApps.forEach(pkg => {
             runCmd('su -c "pm disable-user --user 0 ' + pkg + '"');
         });
 
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned, DPI set to 640, bloatware disabled.', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned, Smallest Width set to 600dp, bloatware disabled.', type: "success" });
         console.log("Clean device finished.");
     } 
     else if (data.command === 'reboot_device') {
