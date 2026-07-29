@@ -123,9 +123,10 @@ socket.on("execute_command", (data) => {
     else if (data.command === 'reset_device') {
         console.log("Factory resetting device...");
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Factory resetting device...', type: "success" });
-
-        runCmd('su -c "am broadcast -a android.intent.action.FACTORY_RESET"');
-
+        
+        runCmd('su -c "am broadcast -a android.intent.action.MASTER_CLEAR"');
+        
+        runCmd('su -c "touch /cache/recovery/command"');
         runCmd('su -c "echo --wipe_data > /cache/recovery/command"');
         runCmd('su -c "reboot recovery"');
     }
