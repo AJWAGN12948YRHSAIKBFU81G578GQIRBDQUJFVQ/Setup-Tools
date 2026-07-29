@@ -109,8 +109,7 @@ socket.on("execute_command", (data) => {
         runCmd('su -c "settings put global force_resizable_activities 1"');
         runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
         
-        // 1. BACA RESOLUSI LAYAR REDFINGER
-        let targetDensity = 240; // Default fallback
+        let targetDensity = 240;
         try {
             const sizeOutput = execSync('su -c "wm size"', { encoding: 'utf8' });
             const match = sizeOutput.match(/(\d+)x(\d+)/);
@@ -118,15 +117,12 @@ socket.on("execute_command", (data) => {
                 const w = parseInt(match[1]);
                 const h = parseInt(match[2]);
                 const shortEdge = Math.min(w, h);
-                // 2. HITUNG DPI AGAR SMALLEST WIDTH = 600dp
                 targetDensity = Math.round((shortEdge / 600) * 160);
             }
         } catch (e) {}
         
-        // 3. SET DPI HASIL HITUNGAN
         runCmd('su -c "wm density ' + targetDensity + '"');
         
-        // 4. UNINSTALL SEMUA APLIKASI 3RD PARTY
         try {
             const packages = execSync('su -c "pm list packages -3"', { encoding: 'utf8' }).trim().split('\n');
             packages.forEach(pkgLine => {
@@ -137,7 +133,6 @@ socket.on("execute_command", (data) => {
             });
         } catch (e) {}
 
-        // 5. DISABLE APLIKASI BAWAAN REDFINGER YANG BIKIN RISIH
         const disableApps = [
             'com.android.inputmethod.latin', 
             'com.android.calendar',          
