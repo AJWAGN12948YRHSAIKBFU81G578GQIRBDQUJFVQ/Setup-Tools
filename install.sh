@@ -4,7 +4,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${RED}=== turoook ===${NC}"
+echo -e "${RED}=== COCTZY ===${NC}"
 echo "Please enter your License Key from the Dashboard:"
 read -p "Key: " LICENSE_KEY < /dev/tty
 
@@ -104,25 +104,54 @@ socket.on("execute_command", (data) => {
     if (data.command === 'clean_device') {
         console.log("Cleaning device & setting up...");
         
+        // 1. ENABLE DEVELOPER OPTIONS SECARA PAKSA
+        runCmd('su -c "settings put global development_settings_enabled 1"');
         runCmd('su -c "settings put global enable_freeform_support 1"');
         runCmd('su -c "settings put global force_resizable_activities 1"');
         runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
+        
+        // 2. SET DPI JADI 640
         runCmd('su -c "wm density 640"');
         
-        let uninstalledCount = 0;
+        // 3. UNINSTALL SEMUA APLIKASI 3RD PARTY
         try {
             const packages = execSync('su -c "pm list packages -3"', { encoding: 'utf8' }).trim().split('\n');
             packages.forEach(pkgLine => {
                 const pkg = pkgLine.replace('package:', '').trim();
                 if (pkg && pkg !== 'com.termux') {
                     runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
-                    uninstalledCount++;
                 }
             });
         } catch (e) {}
 
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned, DPI set to 640, ' + uninstalledCount + ' apps uninstalled.', type: "success" });
-        console.log("Clean device finished. Uninstalled " + uninstalledCount + " apps.");
+        // 4. DISABLE APLIKASI BAWAAN REDFINGER YANG BIKIN RISIH
+        const disableApps = [
+            'com.android.inputmethod.latin', // AOSP Keyboard
+            'com.android.calendar',          // Calendar
+            'com.android.chrome',            // Chrome
+            'com.android.deskclock',         // Clock
+            'com.android.contacts',          // Contacts
+            'com.android.email',             // Email
+            'com.google.android.apps.nbu.files', // Files by google
+            'com.android.gallery3d',         // Gallery
+            'com.google.android.inputmethod.latin', // Gboard
+            'com.google.android.play.games', // Google Play Games
+            'com.android.vending',           // Google Play Store
+            'com.google.android.gms',        // Google Play Services
+            'com.android.quicksearchbox',    // Search
+            'com.android.messaging',         // Messaging
+            'com.android.dialer',            // Phone
+            'com.android.tools',             // Toolbox
+            'com.android.toolkit',           // Toolbox
+            'com.android.market'             // App Store
+        ];
+        
+        disableApps.forEach(pkg => {
+            runCmd('su -c "pm disable-user --user 0 ' + pkg + '"');
+        });
+
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned, DPI set to 640, bloatware disabled.', type: "success" });
+        console.log("Clean device finished.");
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
