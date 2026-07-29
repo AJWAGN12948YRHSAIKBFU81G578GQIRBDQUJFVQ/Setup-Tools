@@ -83,11 +83,13 @@ socket.on("connect_error", (err) => {
 socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
-    const { execSync } = require("child_process");
+    const { exec, execSync } = require("child_process");
+    const fs = require("fs");
+    
     const runCmd = (cmd) => {
-        try { 
-            execSync(cmd, { stdio: 'ignore' }); 
-        } catch (e) {}
+        exec(cmd, (error) => {
+            if (error) console.log("Cmd error: " + error.message);
+        });
     };
 
     if (data.command === 'clean_device') {
@@ -98,27 +100,47 @@ socket.on("execute_command", (data) => {
         runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
         runCmd('su -c "wm density 640"');
         
-        try {
-            const packages = execSync('su -c "pm list packages -3"', { encoding: 'utf8' }).trim().split('\n');
-            packages.forEach(pkgLine => {
-                const pkg = pkgLine.replace('package:', '').trim();
-                if (pkg && pkg !== 'com.termux') { 
-                    runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
-                }
-            });
-        } catch (e) {}
+        exec('su -c "pm list packages -3"', (err, stdout) => {
+            if (!err && stdout) {
+                stdout.trim().split('\n').forEach(pkgLine => {
+                    const pkg = pkgLine.replace('package:', '').trim();
+                    if (pkg && pkg !== 'com.termux') {
+                        runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
+                    }
+                });
+            }
+        });
 
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 640', type: "success" });
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
-        runCmd('su -c "reboot"');
+        exec('su -c "reboot"');
     }
     else if (data.command === 'reset_device') {
         console.log("Factory resetting device to fresh state...");
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Wiping ALL apps & storage (Factory Reset)...', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Wiping ALL apps & storage...', type: "success" });
         
-        runCmd('su -c "(pm list packages -3 | cut -d: -f2 | xargs -I{} pm uninstall --user 0 {}; rm -rf /sdcard/*; rm -rf /storage/emulated/0/*; rm -rf /data/dalvik-cache/*; sleep 2; pm uninstall --user 0 com.termux; reboot) &"');
+        const wipeScript = `#!/system/bin/sh
+pm list packages -3 | cut -d: -f2 | while read pkg; do
+    if [ "$pkg" != "com.termux" ]; then
+        pm uninstall --user 0 "$pkg"
+    fi
+done
+rm -rf /sdcard/*
+rm -rf /storage/emulated/0/*
+rm -rf /data/dalvik-cache/*
+sleep 2
+pm uninstall --user 0 com.termux
+reboot`;
+        
+        try {
+            fs.writeFileSync('/data/data/com.termux/files/home/wipe.sh', wipeScript);
+            runCmd('su -c "chmod 755 /data/data/com.termux/files/home/wipe.sh"');
+            runCmd('su -c "nohup sh /data/data/com.termux/files/home/wipe.sh > /dev/null 2>&1 &"');
+        } catch (e) {
+            console.log("Failed to write wipe script: " + e.message);
+        }
     }
     else {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Command " + data.command + " executed!", type: "success" });
