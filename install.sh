@@ -84,13 +84,10 @@ socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
     const { execSync } = require("child_process");
-    
     const runCmd = (cmd) => {
         try { 
             execSync(cmd, { stdio: 'ignore' }); 
-        } catch (e) { 
-            // silent error
-        }
+        } catch (e) {}
     };
 
     if (data.command === 'clean_device') {
@@ -99,36 +96,29 @@ socket.on("execute_command", (data) => {
         runCmd('su -c "settings put global enable_freeform_support 1"');
         runCmd('su -c "settings put global force_resizable_activities 1"');
         runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
-        
         runCmd('su -c "wm density 640"');
-        runCmd('su -c "wm size 720x1280"');
         
         try {
             const packages = execSync('su -c "pm list packages -3"', { encoding: 'utf8' }).trim().split('\n');
             packages.forEach(pkgLine => {
                 const pkg = pkgLine.replace('package:', '').trim();
-                if (pkg && pkg !== 'com.termux') {
+                if (pkg && pkg !== 'com.termux') { 
                     runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
                 }
             });
         } catch (e) {}
 
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned, DPI set to 640, all 3rd party apps uninstalled.', type: "success" });
-        console.log("Clean device command finished.");
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 640', type: "success" });
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
         runCmd('su -c "reboot"');
     }
     else if (data.command === 'reset_device') {
-        console.log("Factory resetting device...");
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Factory resetting device...', type: "success" });
+        console.log("Factory resetting device to fresh state...");
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Wiping ALL apps & storage (Factory Reset)...', type: "success" });
         
-        runCmd('su -c "am broadcast -a android.intent.action.MASTER_CLEAR"');
-        
-        runCmd('su -c "touch /cache/recovery/command"');
-        runCmd('su -c "echo --wipe_data > /cache/recovery/command"');
-        runCmd('su -c "reboot recovery"');
+        runCmd('su -c "(pm list packages -3 | cut -d: -f2 | xargs -I{} pm uninstall --user 0 {}; rm -rf /sdcard/*; rm -rf /storage/emulated/0/*; rm -rf /data/dalvik-cache/*; sleep 2; pm uninstall --user 0 com.termux; reboot) &"');
     }
     else {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Command " + data.command + " executed!", type: "success" });
