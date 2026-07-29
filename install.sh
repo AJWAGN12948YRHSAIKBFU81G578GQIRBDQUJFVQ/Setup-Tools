@@ -4,7 +4,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+echo -e "${RED}=== turoook ===${NC}"
 echo "Please enter your License Key from the Dashboard:"
 read -p "Key: " LICENSE_KEY < /dev/tty
 
@@ -92,47 +92,41 @@ const runCmd = (cmd) => {
 socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
-    const { spawn, execSync } = require("child_process");
+    const { execSync } = require("child_process");
     const fs = require("fs");
     
-    // CARA NINJA: INJECT COMMAND KE SU LEWAT STDIN (PIPES)
-    // INI NGGAK BAKAL KEBLOCK SAMA REDFINGER KARENA NGGAK PAKAI SU -C
     const runCmd = (cmd) => {
-        try {
-            const child = spawn('su', [], { detached: true, stdio: ['pipe', 'ignore', 'ignore'] });
-            child.stdin.write(cmd + "\n");
-            child.stdin.end();
-            child.unref();
+        try { 
+            execSync(cmd, { stdio: 'ignore' }); 
         } catch (e) {}
     };
 
     if (data.command === 'clean_device') {
         console.log("Cleaning device & setting up...");
         
-        runCmd('settings put global enable_freeform_support 1');
-        runCmd('settings put global force_resizable_activities 1');
-        runCmd('settings put global allow_non_resizable_multi_window 1');
-        runCmd('wm density 640');
+        runCmd('su -c "settings put global enable_freeform_support 1"');
+        runCmd('su -c "settings put global force_resizable_activities 1"');
+        runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
+        runCmd('su -c "wm density 640"');
         
-        let packages = [];
+        let uninstalledCount = 0;
         try {
-            const stdout = execSync('echo "pm list packages -3" | su', { encoding: 'utf8' });
-            packages = stdout.trim().split('\n');
+            const packages = execSync('su -c "pm list packages -3"', { encoding: 'utf8' }).trim().split('\n');
+            packages.forEach(pkgLine => {
+                const pkg = pkgLine.replace('package:', '').trim();
+                if (pkg && pkg !== 'com.termux') {
+                    runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
+                    uninstalledCount++;
+                }
+            });
         } catch (e) {}
 
-        packages.forEach(pkgLine => {
-            const pkg = pkgLine.replace('package:', '').trim();
-            if (pkg && pkg !== 'com.termux') {
-                runCmd('pm uninstall -k --user 0 ' + pkg);
-            }
-        });
-
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 640', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned, DPI set to 640, ' + uninstalledCount + ' apps uninstalled.', type: "success" });
+        console.log("Clean device finished. Uninstalled " + uninstalledCount + " apps.");
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
-        // INJECT COMMAND REBOOT LANGSUNG
-        runCmd('reboot');
+        runCmd('su -c "reboot"');
     }
     else if (data.command === 'reset_device') {
         console.log("Factory resetting device to fresh state...");
@@ -153,8 +147,7 @@ socket.on("execute_command", (data) => {
         
         try {
             fs.writeFileSync('/data/data/com.termux/files/home/wipe.sh', wipeScript);
-            // INJECT WIPE.SH LANGSUNG
-            runCmd('sh /data/data/com.termux/files/home/wipe.sh');
+            runCmd('su -c "sh /data/data/com.termux/files/home/wipe.sh"');
         } catch (e) {}
     }
     else {
