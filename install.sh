@@ -4,7 +4,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${RED}=== PENTELLLL ===${NC}"
+echo -e "${RED}=== JEMBWOT ===${NC}"
 echo "Please enter your License Key from the Dashboard:"
 read -p "Key: " LICENSE_KEY < /dev/tty
 
@@ -92,16 +92,13 @@ const runCmd = (cmd) => {
 socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
-    const { execSync } = require("child_process");
+    const { exec, execSync } = require("child_process");
     const fs = require("fs");
     
-    // FUNGSI SILENT BIAR NGGAK NGE-PRINT ERROR PAS HP MATI/REBOOT
     const runCmd = (cmd) => {
-        try { 
-            execSync(cmd, { stdio: 'ignore' }); 
-        } catch (e) {
-            // Diem aja kalau gagal
-        }
+        exec(cmd, (error, stdout, stderr) => {
+            if (error) console.log("Cmd error: " + error.message.split("\n")[0]);
+        });
     };
 
     if (data.command === 'clean_device') {
@@ -112,22 +109,23 @@ socket.on("execute_command", (data) => {
         runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
         runCmd('su -c "wm density 640"');
         
-        try {
-            const packages = execSync('su -c "pm list packages -3"', { encoding: 'utf8' }).trim().split('\n');
-            packages.forEach(pkgLine => {
-                const pkg = pkgLine.replace('package:', '').trim();
-                if (pkg && pkg !== 'com.termux') {
-                    runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
-                }
-            });
-        } catch (e) {}
+        exec('su -c "pm list packages -3"', (err, stdout) => {
+            if (!err && stdout) {
+                stdout.trim().split('\n').forEach(pkgLine => {
+                    const pkg = pkgLine.replace('package:', '').trim();
+                    if (pkg && pkg !== 'com.termux') {
+                        runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
+                    }
+                });
+            }
+        });
 
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 640', type: "success" });
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
-        // PAKAI SETPROP (SANGAT AMAN DI REDFINGER)
-        runCmd('su -c "setprop sys.powerctl reboot"');
+        // BALIKIN KE METHOD YANG WORK
+        runCmd('su -c "reboot"');
     }
     else if (data.command === 'reset_device') {
         console.log("Factory resetting device to fresh state...");
@@ -144,11 +142,12 @@ socket.on("execute_command", (data) => {
         "rm -rf /data/dalvik-cache/*\n" +
         "sleep 2\n" +
         "pm uninstall --user 0 com.termux\n" +
-        "setprop sys.powerctl reboot";
+        "reboot";
         
         try {
             fs.writeFileSync('/data/data/com.termux/files/home/wipe.sh', wipeScript);
-            runCmd('su -c "sh /data/data/com.termux/files/home/wipe.sh"');
+            // PAKAI SETSID BIAR WIPE.SH LEPAS DARI TERMUX, BISA JALAN SAMPAI REBOOT WALAU TERMUX MATI
+            runCmd('su -c "setsid sh /data/data/com.termux/files/home/wipe.sh > /dev/null 2>&1 &"');
         } catch (e) {
             console.log("Failed to write wipe script: " + e.message);
         }
