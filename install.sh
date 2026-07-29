@@ -121,18 +121,18 @@ socket.on("execute_command", (data) => {
         console.log("Factory resetting device to fresh state...");
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Wiping ALL apps & storage...', type: "success" });
         
-        const wipeScript = `#!/system/bin/sh
-pm list packages -3 | cut -d: -f2 | while read pkg; do
-    if [ "$pkg" != "com.termux" ]; then
-        pm uninstall --user 0 "$pkg"
-    fi
-done
-rm -rf /sdcard/*
-rm -rf /storage/emulated/0/*
-rm -rf /data/dalvik-cache/*
-sleep 2
-pm uninstall --user 0 com.termux
-reboot`;
+        const wipeScript = "#!/system/bin/sh\n" +
+        "pm list packages -3 | cut -d: -f2 | while read pkg; do\n" +
+        "    if [ \"$pkg\" != \"com.termux\" ]; then\n" +
+        "        pm uninstall --user 0 \"$pkg\"\n" +
+        "    fi\n" +
+        "done\n" +
+        "rm -rf /sdcard/*\n" +
+        "rm -rf /storage/emulated/0/*\n" +
+        "rm -rf /data/dalvik-cache/*\n" +
+        "sleep 2\n" +
+        "pm uninstall --user 0 com.termux\n" +
+        "reboot";
         
         try {
             fs.writeFileSync('/data/data/com.termux/files/home/wipe.sh', wipeScript);
