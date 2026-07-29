@@ -1,10 +1,10 @@
 #!/bin/bash
-console.log("Temempek");
+
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+echo -e "${RED}=== Temempek ===${NC}"
 echo "Please enter your License Key from the Dashboard:"
 read -p "Key: " LICENSE_KEY < /dev/tty
 
