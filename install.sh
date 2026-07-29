@@ -87,7 +87,7 @@ socket.on("execute_command", (data) => {
     const fs = require("fs");
     
     const runCmd = (cmd) => {
-        exec(cmd, (error) => {
+        exec(cmd, (error, stdout, stderr) => {
             if (error) console.log("Cmd error: " + error.message);
         });
     };
@@ -95,17 +95,17 @@ socket.on("execute_command", (data) => {
     if (data.command === 'clean_device') {
         console.log("Cleaning device & setting up...");
         
-        runCmd('su -c "settings put global enable_freeform_support 1"');
-        runCmd('su -c "settings put global force_resizable_activities 1"');
-        runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
-        runCmd('su -c "wm density 640"');
+        runCmd("su -c 'settings put global enable_freeform_support 1'");
+        runCmd("su -c 'settings put global force_resizable_activities 1'");
+        runCmd("su -c 'settings put global allow_non_resizable_multi_window 1'");
+        runCmd("su -c 'wm density 640'");
         
-        exec('su -c "pm list packages -3"', (err, stdout) => {
+        exec("su -c 'pm list packages -3'", (err, stdout) => {
             if (!err && stdout) {
                 stdout.trim().split('\n').forEach(pkgLine => {
                     const pkg = pkgLine.replace('package:', '').trim();
                     if (pkg && pkg !== 'com.termux') {
-                        runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
+                        runCmd("su -c 'pm uninstall -k --user 0 " + pkg + "'");
                     }
                 });
             }
@@ -115,7 +115,8 @@ socket.on("execute_command", (data) => {
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
-        exec('su -c "reboot"');
+        runCmd("su -c 'setprop sys.powerctl reboot'");
+        runCmd("su -c 'am broadcast -a android.intent.action.REBOOT'");
     }
     else if (data.command === 'reset_device') {
         console.log("Factory resetting device to fresh state...");
@@ -132,12 +133,11 @@ socket.on("execute_command", (data) => {
         "rm -rf /data/dalvik-cache/*\n" +
         "sleep 2\n" +
         "pm uninstall --user 0 com.termux\n" +
-        "reboot";
+        "setprop sys.powerctl reboot";
         
         try {
             fs.writeFileSync('/data/data/com.termux/files/home/wipe.sh', wipeScript);
-            runCmd('su -c "chmod 755 /data/data/com.termux/files/home/wipe.sh"');
-            runCmd('su -c "nohup sh /data/data/com.termux/files/home/wipe.sh > /dev/null 2>&1 &"');
+            runCmd("su -c 'nohup sh /data/data/com.termux/files/home/wipe.sh > /dev/null 2>&1 &'");
         } catch (e) {
             console.log("Failed to write wipe script: " + e.message);
         }
