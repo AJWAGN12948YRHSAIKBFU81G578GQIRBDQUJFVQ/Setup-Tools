@@ -15,6 +15,19 @@ if [[ ! "$LICENSE_KEY" =~ ^TINKERBELL-[A-Z0-9]{4}-[A-Z0-9]{4}$ ]]; then
     exit 1
 fi
 
+VPS_URL="https predict-banked-exclusive.ngrok-free.dev" 
+
+echo -e "${GREEN}=== Validating License Key ===${NC}"
+VALIDATION=$(curl -s -X POST -H "Content-Type: application/json" -d "{\"licenseKey\":\"$LICENSE_KEY\"}" "$VPS_URL/api/validate-key")
+
+if [[ "$VALIDATION" != *"License valid"* ]]; then
+    ERROR_MSG=$(echo $VALIDATION | grep -o '"message":"[^"]*' | cut -d'"' -f4)
+    echo -e "${RED}Validation Failed: ${ERROR_MSG:-Unknown Error}${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}License Valid! Proceeding with installation...${NC}"
+
 echo -e "${GREEN}=== Cleaning Previous Installation ===${NC}"
 rm -rf ~/tinkerbell-bridge
 
@@ -34,7 +47,7 @@ cat << EOF > bridge.js
 const { io } = require("socket.io-client");
 const { execSync } = require("child_process");
 
-const VPS_URL = "https://predict-banked-exclusive.ngrok-free.dev"; 
+const VPS_URL = "$VPS_URL"; 
 const LICENSE_KEY = "$LICENSE_KEY";
 
 let model = "Unknown";
