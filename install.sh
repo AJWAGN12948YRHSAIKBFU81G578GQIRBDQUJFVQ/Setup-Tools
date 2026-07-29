@@ -15,10 +15,10 @@ if [[ ! "$LICENSE_KEY" =~ ^TINKERBELL-[A-Z0-9]{4}-[A-Z0-9]{4}$ ]]; then
     exit 1
 fi
 
-VPS_URL="https predict-banked-exclusive.ngrok-free.dev" 
+VPS_URL="https://predict-banked-exclusive.ngrok-free.dev" 
 
 echo -e "${GREEN}=== Validating License Key ===${NC}"
-VALIDATION=$(curl -s -X POST -H "Content-Type: application/json" -d "{\"licenseKey\":\"$LICENSE_KEY\"}" "$VPS_URL/api/validate-key")
+VALIDATION=$(curl -s -X POST -H "Content-Type: application/json" -H "ngrok-skip-browser-warning: true" -d "{\"licenseKey\":\"$LICENSE_KEY\"}" "$VPS_URL/api/validate-key")
 
 if [[ "$VALIDATION" != *"License valid"* ]]; then
     ERROR_MSG=$(echo $VALIDATION | grep -o '"message":"[^"]*' | cut -d'"' -f4)
@@ -27,7 +27,6 @@ if [[ "$VALIDATION" != *"License valid"* ]]; then
 fi
 
 echo -e "${GREEN}License Valid! Proceeding with installation...${NC}"
-
 echo -e "${GREEN}=== Cleaning Previous Installation ===${NC}"
 rm -rf ~/tinkerbell-bridge
 
@@ -83,8 +82,48 @@ socket.on("connect_error", (err) => {
 });
 
 socket.on("execute_command", (data) => {
-    console.log(\`[CMD] Received: \${data.command}\`);
-    socket.emit("device_log", { deviceId: DEVICE_ID, message: \`Command \${data.command} executed!\`, type: "success" });
+    console.log(`[CMD] Received: ${data.command}`);
+    
+    if (data.command === 'clean_device') {
+        console.log("Cleaning device & setting up...");
+        try {
+            execSync('su -c "settings put global enable_freeform_support 1"');
+            execSync('su -c "settings put global force_resizable_activities 1"');
+            execSync('su -c "settings put global allow_non_resizable_multi_window 1"');
+            
+            execSync('su -c "wm density 600"');
+            
+            const bloatware = [
+                'com.google.android.youtube', 'com.google.android.apps.photos', 
+                'com.android.chrome', 'com.google.android.apps.maps', 
+                'com.google.android.gm', 'com.google.android.videos', 
+                'com.google.android.music', 'com.google.android.apps.docs',
+                'com.google.android.apps.magazines', 'com.miui.player'
+            ];
+            bloatware.forEach(pkg => {
+                execSync(`su -c "pm uninstall -k --user 0 ${pkg}" > /dev/null 2>&1`);
+            });
+
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 600 successfully', type: "success" });
+            console.log("Device cleaned successfully!");
+        } catch (e) {
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Clean Device Failed. Root access required in Termux.', type: "error" });
+            console.log("Clean failed: " + e.message);
+        }
+    } 
+    else if (data.command === 'reboot_device') {
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
+        console.log("Rebooting device...");
+        execSync('su -c "reboot"');
+    }
+    else if (data.command === 'reset_device') {
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Factory Resetting device...', type: "success" });
+        console.log("Factory resetting device...");
+        execSync('su -c "pm clear com.roblox.client" > /dev/null 2>&1');
+    }
+    else {
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: `Command ${data.command} executed!`, type: "success" });
+    }
 });
 
 socket.on("disconnect", () => { console.log("Disconnected. Reconnecting..."); });
