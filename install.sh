@@ -83,10 +83,14 @@ socket.on("connect_error", (err) => {
 socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
-    const { exec } = require("child_process");
+    const { execSync } = require("child_process");
     
     const runCmd = (cmd) => {
-        exec(cmd, () => {}); 
+        try { 
+            execSync(cmd, { stdio: 'ignore' }); 
+        } catch (e) { 
+            // silent error
+        }
     };
 
     if (data.command === 'clean_device') {
@@ -95,19 +99,21 @@ socket.on("execute_command", (data) => {
         runCmd('su -c "settings put global enable_freeform_support 1"');
         runCmd('su -c "settings put global force_resizable_activities 1"');
         runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
-        runCmd('su -c "wm density 640"');
         
-        const bloatware = [
-            'com.google.android.youtube', 'com.google.android.apps.photos', 
-            'com.android.chrome', 'com.google.android.apps.maps', 
-            'com.google.android.gm', 'com.google.android.videos', 
-            'com.google.android.music', 'com.google.android.apps.docs'
-        ];
-        bloatware.forEach(pkg => {
-            runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
-        });
+        runCmd('su -c "wm density 640"');
+        runCmd('su -c "wm size 720x1280"');
+        
+        try {
+            const packages = execSync('su -c "pm list packages -3"', { encoding: 'utf8' }).trim().split('\n');
+            packages.forEach(pkgLine => {
+                const pkg = pkgLine.replace('package:', '').trim();
+                if (pkg && pkg !== 'com.termux') {
+                    runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
+                }
+            });
+        } catch (e) {}
 
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 640 successfully', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned, DPI set to 640, all 3rd party apps uninstalled.', type: "success" });
         console.log("Clean device command finished.");
     } 
     else if (data.command === 'reboot_device') {
@@ -115,10 +121,13 @@ socket.on("execute_command", (data) => {
         runCmd('su -c "reboot"');
     }
     else if (data.command === 'reset_device') {
-        runCmd('su -c "pm clear com.roblox.client"');
-        runCmd('su -c "pm clear com.roblox.client.beta"');
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Roblox data cleared successfully', type: "success" });
-        console.log("Reset device command finished.");
+        console.log("Factory resetting device...");
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Factory resetting device...', type: "success" });
+
+        runCmd('su -c "am broadcast -a android.intent.action.FACTORY_RESET"');
+
+        runCmd('su -c "echo --wipe_data > /cache/recovery/command"');
+        runCmd('su -c "reboot recovery"');
     }
     else {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Command " + data.command + " executed!", type: "success" });
