@@ -4,7 +4,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${RED}=== JEMBWOT ===${NC}"
+echo -e "${RED}=== cuih ===${NC}"
 echo "Please enter your License Key from the Dashboard:"
 read -p "Key: " LICENSE_KEY < /dev/tty
 
@@ -92,31 +92,38 @@ const runCmd = (cmd) => {
 socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
-    const { exec, execSync } = require("child_process");
+    const { spawn, execSync } = require("child_process");
     const fs = require("fs");
     
+    // CARA NINJA: INJECT COMMAND KE SU LEWAT STDIN (PIPES)
+    // INI NGGAK BAKAL KEBLOCK SAMA REDFINGER KARENA NGGAK PAKAI SU -C
     const runCmd = (cmd) => {
-        exec(cmd, (error, stdout, stderr) => {
-            if (error) console.log("Cmd error: " + error.message.split("\n")[0]);
-        });
+        try {
+            const child = spawn('su', [], { detached: true, stdio: ['pipe', 'ignore', 'ignore'] });
+            child.stdin.write(cmd + "\n");
+            child.stdin.end();
+            child.unref();
+        } catch (e) {}
     };
 
     if (data.command === 'clean_device') {
         console.log("Cleaning device & setting up...");
         
-        runCmd('su -c "settings put global enable_freeform_support 1"');
-        runCmd('su -c "settings put global force_resizable_activities 1"');
-        runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
-        runCmd('su -c "wm density 640"');
+        runCmd('settings put global enable_freeform_support 1');
+        runCmd('settings put global force_resizable_activities 1');
+        runCmd('settings put global allow_non_resizable_multi_window 1');
+        runCmd('wm density 640');
         
-        exec('su -c "pm list packages -3"', (err, stdout) => {
-            if (!err && stdout) {
-                stdout.trim().split('\n').forEach(pkgLine => {
-                    const pkg = pkgLine.replace('package:', '').trim();
-                    if (pkg && pkg !== 'com.termux') {
-                        runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
-                    }
-                });
+        let packages = [];
+        try {
+            const stdout = execSync('echo "pm list packages -3" | su', { encoding: 'utf8' });
+            packages = stdout.trim().split('\n');
+        } catch (e) {}
+
+        packages.forEach(pkgLine => {
+            const pkg = pkgLine.replace('package:', '').trim();
+            if (pkg && pkg !== 'com.termux') {
+                runCmd('pm uninstall -k --user 0 ' + pkg);
             }
         });
 
@@ -124,8 +131,8 @@ socket.on("execute_command", (data) => {
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
-        // BALIKIN KE METHOD YANG WORK
-        runCmd('su -c "reboot"');
+        // INJECT COMMAND REBOOT LANGSUNG
+        runCmd('reboot');
     }
     else if (data.command === 'reset_device') {
         console.log("Factory resetting device to fresh state...");
@@ -146,11 +153,9 @@ socket.on("execute_command", (data) => {
         
         try {
             fs.writeFileSync('/data/data/com.termux/files/home/wipe.sh', wipeScript);
-            // PAKAI SETSID BIAR WIPE.SH LEPAS DARI TERMUX, BISA JALAN SAMPAI REBOOT WALAU TERMUX MATI
-            runCmd('su -c "setsid sh /data/data/com.termux/files/home/wipe.sh > /dev/null 2>&1 &"');
-        } catch (e) {
-            console.log("Failed to write wipe script: " + e.message);
-        }
+            // INJECT WIPE.SH LANGSUNG
+            runCmd('sh /data/data/com.termux/files/home/wipe.sh');
+        } catch (e) {}
     }
     else {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Command " + data.command + " executed!", type: "success" });
