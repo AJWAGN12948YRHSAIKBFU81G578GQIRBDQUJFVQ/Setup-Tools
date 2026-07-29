@@ -57,7 +57,7 @@ try { model = execSync("getprop ro.product.model").toString().trim(); } catch (e
 try { serial = execSync("getprop ro.serialno").toString().trim(); } catch (e) {}
 try { androidId = execSync("settings get secure android_id").toString().trim(); } catch (e) {}
 
-const DEVICE_ID = \`\${model}-\${serial}-\${androidId}\`;
+const DEVICE_ID = model + "-" + serial + "-" + androidId;
 
 console.log("Hardware ID: " + DEVICE_ID);
 console.log("Connecting to Tinkerbell Dashboard...");
@@ -76,13 +76,12 @@ socket.on("connect", () => {
 socket.on("connect_error", (err) => {
     console.log("[!] Connection Failed: " + err.message);
     if (err.message.includes("Authentication failed") || err.message.includes("Invalid License Key") || err.message.includes("Device limit reached") || err.message.includes("License not activated")) {
-        console.log("[!] Please check your License Key or reset it from the dashboard.");
         process.exit(1);
     }
 });
 
 socket.on("execute_command", (data) => {
-    console.log(`[CMD] Received: ${data.command}`);
+    console.log("[CMD] Received: " + data.command);
     
     if (data.command === 'clean_device') {
         console.log("Cleaning device & setting up...");
@@ -90,39 +89,33 @@ socket.on("execute_command", (data) => {
             execSync('su -c "settings put global enable_freeform_support 1"');
             execSync('su -c "settings put global force_resizable_activities 1"');
             execSync('su -c "settings put global allow_non_resizable_multi_window 1"');
-            
             execSync('su -c "wm density 600"');
             
             const bloatware = [
                 'com.google.android.youtube', 'com.google.android.apps.photos', 
                 'com.android.chrome', 'com.google.android.apps.maps', 
                 'com.google.android.gm', 'com.google.android.videos', 
-                'com.google.android.music', 'com.google.android.apps.docs',
-                'com.google.android.apps.magazines', 'com.miui.player'
+                'com.google.android.music', 'com.google.android.apps.docs'
             ];
             bloatware.forEach(pkg => {
-                execSync(`su -c "pm uninstall -k --user 0 ${pkg}" > /dev/null 2>&1`);
+                execSync("su -c 'pm uninstall -k --user 0 " + pkg + "' > /dev/null 2>&1");
             });
 
             socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 600 successfully', type: "success" });
-            console.log("Device cleaned successfully!");
         } catch (e) {
-            socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Clean Device Failed. Root access required in Termux.', type: "error" });
-            console.log("Clean failed: " + e.message);
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Clean Device Failed. Root access required.', type: "error" });
         }
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
-        console.log("Rebooting device...");
         execSync('su -c "reboot"');
     }
     else if (data.command === 'reset_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Factory Resetting device...', type: "success" });
-        console.log("Factory resetting device...");
         execSync('su -c "pm clear com.roblox.client" > /dev/null 2>&1');
     }
     else {
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: `Command ${data.command} executed!`, type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Command " + data.command + " executed!", type: "success" });
     }
 });
 
