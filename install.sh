@@ -22,7 +22,7 @@ VALIDATION=$(curl -s -X POST -H "Content-Type: application/json" -d "{\"licenseK
 
 if [[ "$VALIDATION" != *"License valid"* ]]; then
     ERROR_MSG=$(echo $VALIDATION | grep -o '"message":"[^"]*' | cut -d'"' -f4)
-    echo -e "${RED}Validation Failed: ${ERROR_MSG:-Unknown Error}${NC}"
+    echo -e "${RED}Validation Failed: ${ERROR_MSG:-Invalid License Key}${NC}"
     exit 1
 fi
 
