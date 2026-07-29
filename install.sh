@@ -83,21 +83,23 @@ socket.on("connect_error", (err) => {
 socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
+    const { exec } = require("child_process");
     const runCmd = (cmd) => {
-        try { 
-            execSync(cmd); 
-        } catch (e) { 
-            console.log("Cmd skipped: " + cmd); 
-        }
+        exec(cmd, (error, stdout, stderr) => {
+            if (error) {
+                console.log("Cmd error: " + error.message);
+                return;
+            }
+        });
     };
 
     if (data.command === 'clean_device') {
         console.log("Cleaning device & setting up...");
         
-        runCmd('su -c "settings put global enable_freeform_support 1"');
-        runCmd('su -c "settings put global force_resizable_activities 1"');
-        runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
-        runCmd('su -c "wm density 640"');
+        runCmd("su -c 'settings put global enable_freeform_support 1'");
+        runCmd("su -c 'settings put global force_resizable_activities 1'");
+        runCmd("su -c 'settings put global allow_non_resizable_multi_window 1'");
+        runCmd("su -c 'wm density 640'");
         
         const bloatware = [
             'com.google.android.youtube', 'com.google.android.apps.photos', 
@@ -113,11 +115,11 @@ socket.on("execute_command", (data) => {
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
-        runCmd('su -c "reboot"');
+        runCmd("su -c 'reboot'");
     }
     else if (data.command === 'reset_device') {
-        runCmd('su -c "pm clear com.roblox.client"');
-        runCmd('su -c "pm clear com.roblox.client.beta"');
+        runCmd("su -c 'pm clear com.roblox.client'");
+        runCmd("su -c 'pm clear com.roblox.client.beta'");
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Roblox data cleared successfully', type: "success" });
     }
     else {
