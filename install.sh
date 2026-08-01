@@ -4,7 +4,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${RED}=== Tinkerbell Bridge Installer xxx ===${NC}"
+echo -e "${RED}=== Tinkerbell Bridge Installer ASHOLE ===${NC}"
 echo "Please enter your License Key from the Dashboard:"
 read -p "Key: " LICENSE_KEY < /dev/tty
 
@@ -192,11 +192,13 @@ socket.on("execute_command", (data) => {
         var appName = apkUrl.split('/').pop().split('?')[0];
         if (appName === "app.apk" || appName === "") appName = "APK";
 
+        // PATH AMAN YANG BISA DITULIS SAMA TERMUX & DIBACA SAMA ROOT
+        var apkPath = "/data/data/com.termux/files/home/app.apk";
+
         console.log("[INSTALL] Downloading " + appName + "...");
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + appName + "...", type: "info" });
 
-        // UBAH PATH DOWNLOAD KE /data/local/tmp/
-        exec("curl -L -A 'Mozilla/5.0' -o /data/local/tmp/app.apk " + apkUrl, (error, stdout, stderr) => {
+        exec("curl -L -A 'Mozilla/5.0' -o " + apkPath + " " + apkUrl, (error, stdout, stderr) => {
             if (error) {
                 console.log("[INSTALL] Download Failed: " + error.message);
                 socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed.", type: "error" });
@@ -206,8 +208,8 @@ socket.on("execute_command", (data) => {
             console.log("[INSTALL] Download complete. Installing...");
             socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download complete. Installing...", type: "info" });
 
-            // UBAH PATH INSTALL JUGA KE /data/local/tmp/
-            exec('su -c "pm install /data/local/tmp/app.apk"', (err2, stdout2, stderr2) => {
+            // INSTALL PAKAI ROOT DARI PATH HOME TERMUX
+            exec('su -c "pm install ' + apkPath + '"', (err2, stdout2, stderr2) => {
                 if (err2) {
                     console.log("[INSTALL] Installation Failed: " + err2.message);
                     socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
