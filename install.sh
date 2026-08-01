@@ -4,7 +4,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${RED}=== Tinkerbell Bridge Installer AUWWW ===${NC}"
+echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
 echo "Please enter your License Key from the Dashboard:"
 read -p "Key: " LICENSE_KEY < /dev/tty
 
@@ -192,24 +192,34 @@ socket.on("execute_command", (data) => {
         var appName = apkUrl.split('/').pop().split('?')[0];
         if (appName === "app.apk" || appName === "") appName = "APK";
 
-        // NOTIF 1: MULAI DOWNLOAD
+        console.log("[INSTALL] Downloading " + appName + "...");
+        // KIRIM NOTIF KE WEB: LAGI DOWNLOAD
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + appName + "...", type: "info" });
-        try {
-            // PROSES DOWNLOAD
-            runCmd("curl -L -o /sdcard/Download/app.apk " + apkUrl);
+
+        // PAKAI EXEC (ASYNC) BIAR NGGAK FREEZE
+        exec("curl -L -A 'Mozilla/5.0' -o /sdcard/Download/app.apk " + apkUrl, (error, stdout, stderr) => {
+            if (error) {
+                console.log("[INSTALL] Download Failed: " + error.message);
+                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed.", type: "error" });
+                return;
+            }
             
-            // NOTIF 2: DOWNLOAD SELESAI, MULAI INSTALL
+            console.log("[INSTALL] Download complete. Installing...");
+            // KIRIM NOTIF KE WEB: LAGI INSTALL
             socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download complete. Installing...", type: "info" });
-            
-            // PROSES INSTALL PAKAI ROOT (AUTO PASANG)
-            runCmd('su -c "pm install /sdcard/Download/app.apk"');
-            
-            // NOTIF 3: BERHASIL
-            socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
-        } catch (e) {
-            // NOTIF ERROR
-            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Failed to install " + appName, type: "error" });
-        }
+
+            // PROSES INSTALL PAKAI ROOT
+            exec('su -c "pm install /sdcard/Download/app.apk"', (err2, stdout2, stderr2) => {
+                if (err2) {
+                    console.log("[INSTALL] Installation Failed: " + err2.message);
+                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
+                } else {
+                    console.log("[INSTALL] " + appName + " installed successfully!");
+                    // KIRIM NOTIF KE WEB: BERHASIL
+                    socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
+                }
+            });
+        });
     }
     else {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Command " + data.command + " executed!", type: "success" });
