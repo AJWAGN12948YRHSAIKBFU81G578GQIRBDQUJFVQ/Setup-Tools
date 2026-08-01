@@ -4,7 +4,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${RED}=== Tinkerbell Bridge InstallerR ===${NC}"
+echo -e "${RED}=== Tinkerbell Bridge Installer AUWWW ===${NC}"
 echo "Please enter your License Key from the Dashboard:"
 read -p "Key: " LICENSE_KEY < /dev/tty
 
@@ -189,17 +189,25 @@ socket.on("execute_command", (data) => {
     }
     else if (data.command === 'install_apk') {
         var apkUrl = data.payload.url;
-        var appName = apkUrl.split('/').pop();
-        console.log("[INSTALL] Downloading " + appName + "...");
-        
-        // DOWNLOAD APK
+        var appName = apkUrl.split('/').pop().split('?')[0];
+        if (appName === "app.apk" || appName === "") appName = "APK";
+
+        // NOTIF 1: MULAI DOWNLOAD
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + appName + "...", type: "info" });
         try {
+            // PROSES DOWNLOAD
             runCmd("curl -L -o /sdcard/Download/app.apk " + apkUrl);
-            console.log("[INSTALL] Installing " + appName + "...");
-            // INSTALL APK
+            
+            // NOTIF 2: DOWNLOAD SELESAI, MULAI INSTALL
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download complete. Installing...", type: "info" });
+            
+            // PROSES INSTALL PAKAI ROOT (AUTO PASANG)
             runCmd('su -c "pm install /sdcard/Download/app.apk"');
-            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Successfully installed " + appName, type: "success" });
+            
+            // NOTIF 3: BERHASIL
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
         } catch (e) {
+            // NOTIF ERROR
             socket.emit("device_log", { deviceId: DEVICE_ID, message: "Failed to install " + appName, type: "error" });
         }
     }
