@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer 0284812 ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer bejir ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -174,12 +174,34 @@ socket.on("execute_command", (data) => {
                                 return;
                             }
 
-                            // TRIK PROFESIONAL: Bikin file .sh sementara buat bypass limit panjang command
-                            const apkPaths = apkFiles.map(f => extractPath + "/" + f).join(" ");
+                            const apkPaths = apkFiles.map(f => extractPath + "/" + f);
                             const scriptPath = extractPath + "/install_split.sh";
                             
-                            // Tulis command pm install-multiple ke dalam file .sh
-                            fs.writeFileSync(scriptPath, "#!/system/bin/sh\npm install-multiple -r -g " + apkPaths + "\n");
+                            // TRIK SESSION INSTALLER (BUAT BYPASS CLOUDPHONE YANG BLOK install-multiple)
+                            let scriptContent = "#!/system/bin/sh\n";
+                            // Buat sesi install baru, ambil ID sesinya pake awk
+                            scriptContent += "SESSION=$(pm install-create -r -g | awk -F'[][]' '{print $2}')\n";
+                            scriptContent += "if [ -z \"$SESSION\" ]; then\n";
+                            scriptContent += "  echo 'Failure [Create Session Failed]'\n";
+                            scriptContent += "  exit 1\n";
+                            scriptContent += "fi\n\n";
+                            
+                            // Masukin tiap file APK ke sesi install satu per satu
+                            apkPaths.forEach(path => {
+                                const name = path.split('/').pop();
+                                scriptContent += `SIZE=$(wc -c < "${path}")\n`;
+                                scriptContent += `pm install-write -S $SIZE $SESSION "${name}" "${path}" > /dev/null 2>&1\n`;
+                                scriptContent += `if [ $? -ne 0 ]; then\n`;
+                                scriptContent += `  pm install-abandon $SESSION > /dev/null 2>&1\n`;
+                                scriptContent += `  echo "Failure [Write Failed: ${name}]"\n`;
+                                scriptContent += `  exit 1\n`;
+                                scriptContent += `fi\n`;
+                            });
+                            
+                            // Eksekusi/install semua APK yang udah ditulis tadi
+                            scriptContent += "pm install-commit $SESSION\n";
+                            
+                            fs.writeFileSync(scriptPath, scriptContent);
                             
                             // Eksekusi file .sh tersebut sebagai root
                             const installCmd = 'su -c "sh ' + scriptPath + '"';
@@ -191,7 +213,6 @@ socket.on("execute_command", (data) => {
                                     socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
                                 } else {
                                     console.log("[INSTALL] Installation Failed: " + output);
-                                    // KIRIM PESAN ERROR ASLI DARI ANDROID KE DASHBOARD
                                     socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed: " + output.substring(0, 150), type: "error" });
                                 }
                                 exec('rm -rf ' + extractPath + ' ' + downloadPath);
