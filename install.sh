@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer XXX ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer jembwot ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -19,6 +19,7 @@ if [[ ! "$LICENSE_KEY" =~ ^TINKERBELL-[A-Z0-9]{4}-[A-Z0-9]{4}$ ]]; then
     exit 1
 fi
 
+# GANTI URL INI DENGAN URL BACKEND LU
 VPS_URL="https://predict-banked-exclusive.ngrok-free.dev" 
 
 echo -e "${GREEN}=== Validating License Key ===${NC}"
@@ -159,8 +160,8 @@ socket.on("execute_command", (data) => {
                             return;
                         }
                         
-                        // CARI FILE .apk DI DALAM FOLDER EXTRACT, LALU INSTALL PAKAI ROOT
-                        exec('su -c "find ' + extractPath + ' -name \\"*.apk\\" -exec pm install {} \\"', (err2) => {
+                        // INSTALL SEMUA FILE .apk DI DALAM FOLDER EXTRACT PAKAI PM INSTALL-MULTIPLE
+                        exec('su -c "pm install-multiple ' + extractPath + '/*.apk"', (err2) => {
                             if (err2) {
                                 console.log("[INSTALL] Installation Failed: " + err2.message);
                                 socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
