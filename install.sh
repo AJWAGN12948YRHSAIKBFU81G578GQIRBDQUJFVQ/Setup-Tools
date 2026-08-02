@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer TUROK ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -110,21 +110,19 @@ socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
     if (data.command === 'clean_device') {
-        // 1. FORCE ENABLE DEVELOPER OPTIONS
-        runCmd('su -c "settings put global development_settings_enabled 1"');
+        console.log("[CMD] Cleaning Device...");
         
-        // 2. SETUP SISTEM BUAT BOTTING
-        runCmd('su -c "settings put global enable_freeform_support 1"');
-        runCmd('su -c "settings put global force_resizable_activities 1"');
-        runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
+        // 1. FORCE ENABLE DEVELOPER OPTIONS (Silent)
+        exec('su -c "settings put global development_settings_enabled 1"', () => {});
+        exec('su -c "settings put global enable_freeform_support 1"', () => {});
+        exec('su -c "settings put global force_resizable_activities 1"', () => {});
+        exec('su -c "settings put global allow_non_resizable_multi_window 1"', () => {});
+        exec('su -c "wm density 192"', () => {});
         
-        // 3. SET SMALLEST WIDTH KE 600 (DPI 192)
-        runCmd('su -c "wm density 192"');
-        
-        // 4. LIST BLOATWARE YANG DI-DISABLE (RAM LEGA, GAK NGILANGIN FILE SISTEM)
+        // 2. LIST BLOATWARE YANG DI-DISABLE
         const disables = [
             "com.android.chrome",              
-            "com.android.vending",             // Play Store
+            "com.android.vending",             
             "com.android.market",
             "com.google.android.play.games",
             "com.google.android.apps.nbu.files",
@@ -133,18 +131,18 @@ socket.on("execute_command", (data) => {
             "com.android.mms.service",
             "com.android.dialer",
             "com.android.calendar",
-            "com.android.deskclock",           // Jam
+            "com.android.deskclock",           
             "com.android.gallery3d",
             "com.android.music",
             "com.android.musicfx",
             "com.android.soundrecorder",
             "com.android.email",
             "com.android.quicksearchbox",
-            "com.android.egg",                 // Easter Egg
+            "com.android.egg",                 
             "com.android.printspooler",
             "com.android.bips",
             "com.android.printservice.recommendation",
-            "com.android.dreams.basic",        // Screensaver
+            "com.android.dreams.basic",        
             "com.android.dreams.phototable",
             "com.android.bluetoothmidiservice",
             "com.android.bluetooth",
@@ -152,8 +150,8 @@ socket.on("execute_command", (data) => {
             "com.android.providers.downloads.ui",
             "com.android.providers.downloads",
             "com.android.hotspot2",
-            "com.android.inputmethod.latin",   // Keyboard Bawaan
-            "com.google.android.inputmethod.latin", // Gboard
+            "com.android.inputmethod.latin",   
+            "com.google.android.inputmethod.latin", 
             "com.android.bookmarkprovider",
             "com.android.cellbroadcastreceiver",
             "com.android.emergency",
@@ -178,12 +176,13 @@ socket.on("execute_command", (data) => {
             "com.android.networkstack"
         ];
         
-        // LOOPING DAN DISABLE SEMUA PACKAGE DI ATAS
+        // 3. LOOPING DISABLE (Pakai exec silent, gak nge-print error apa-apa)
         disables.forEach(pkg => {
-            runCmd('su -c "pm disable-user --user 0 ' + pkg + '"');
+            exec('su -c "pm disable-user --user 0 ' + pkg + '"', () => {});
         });
         
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned! Bloatware disabled & Smallest Width set to 600', type: "success" });
+        console.log("[CMD] Successfully Cleaning Device");
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
