@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer XXX ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -36,7 +36,8 @@ echo -e "${GREEN}=== Cleaning Previous Installation ===${NC}"
 rm -rf ~/tinkerbell-bridge
 
 echo -e "${GREEN}=== Installing Required Packages ===${NC}"
-pkg update -y
+pkg uninstall nodejs -y > /dev/null 2>&1
+pkg install openssl -y
 pkg install nodejs-lts python -y
 
 echo -e "${GREEN}=== Setting Up Bridge Environment ===${NC}"
@@ -149,7 +150,7 @@ socket.on("execute_command", (data) => {
 
                 // KALO FILE-NYA .xapk ATAU .zip, EXTRACT DULU PAKAI PYTHON
                 if (appName.endsWith(".xapk") || appName.endsWith(".zip")) {
-                    var pyCmd = "python -c \\"import zipfile, os; os.makedirs('" + extractPath + "', exist_ok=True); zipfile.ZipFile('" + downloadPath + "').extractall('" + extractPath + ')\\"';
+                    var pyCmd = "python -c \\"import zipfile, os; os.makedirs('" + extractPath + "', exist_ok=True); zipfile.ZipFile('" + downloadPath + "').extractall('" + extractPath + "')\\"";
                     
                     exec(pyCmd, (err1) => {
                         if (err1) {
