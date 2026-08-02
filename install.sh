@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ANJENGGG ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer AWIKWOKKK ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -166,15 +166,27 @@ socket.on("execute_command", (data) => {
                         }
                         
                         try {
-                            const installCmd = 'su -c "find ' + extractPath + ' -name \\"*.apk\\" -print0 | xargs -0 pm install-multiple -r"';
+                            const files = fs.readdirSync(extractPath);
+                            const apkFiles = files.filter(f => f.endsWith('.apk'));
+
+                            if (apkFiles.length === 0) {
+                                socket.emit("device_log", { deviceId: DEVICE_ID, message: "No APK found inside archive.", type: "error" });
+                                return;
+                            }
+
+                            const apkPaths = apkFiles.map(f => extractPath + "/" + f).join(" ");
+                            // TAMBAHKAN -r -g --user 0 BUAT PAKSA INSTALL DI CLOUDPHONE
+                            const installCmd = "su -c 'pm install-multiple -r -g --user 0 " + apkPaths + "'";
                             
                             exec(installCmd, (err2, stdout, stderr) => {
-                                if (err2 || (stderr && !stderr.includes("Success"))) {
-                                    console.log("[INSTALL] Installation Failed: " + (stderr || err2.message));
-                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
-                                } else {
+                                const output = (stdout || "") + (stderr || "");
+                                if (output.includes("Success")) {
                                     console.log("[INSTALL] " + appName + " installed successfully!");
                                     socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
+                                } else {
+                                    console.log("[INSTALL] Installation Failed: " + output);
+                                    // KIRIM PESAN ERROR ASLI DARI ANDROID KE DASHBOARD
+                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed: " + output.substring(0, 100), type: "error" });
                                 }
                                 exec('rm -rf ' + extractPath + ' ' + downloadPath);
                             });
