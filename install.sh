@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer AWIKGOK ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer TEMPEK ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -119,7 +119,7 @@ socket.on("execute_command", (data) => {
         runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
         
         // 3. SET SMALLEST WIDTH / DPI (600)
-        runCmd('su -c "wm density 600"');
+        runCmd('su -c "wm density 192"');
         
         // 4. LIST BLOATWARE YANG WAJIB DIUNINSTALL (RAM LEGA, GAK GANGGU SISTEM RF)
         const uninstalls = [
