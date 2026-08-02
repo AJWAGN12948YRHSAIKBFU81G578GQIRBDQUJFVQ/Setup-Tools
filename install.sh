@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer jembwot ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ANJGG ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -39,7 +39,7 @@ rm -rf ~/tinkerbell-bridge
 echo -e "${GREEN}=== Installing Required Packages ===${NC}"
 pkg uninstall nodejs -y > /dev/null 2>&1
 pkg install openssl -y
-pkg install nodejs-lts python -y
+pkg install nodejs-lts unzip -y
 
 echo -e "${GREEN}=== Setting Up Bridge Environment ===${NC}"
 cd ~
@@ -51,22 +51,35 @@ npm install socket.io-client > /dev/null 2>&1
 
 cat << EOF > bridge.js
 const { io } = require("socket.io-client");
-const { exec } = require("child_process");
+const { exec, execSync } = require("child_process");
+const fs = require("fs");
 
 const VPS_URL = "$VPS_URL"; 
 const LICENSE_KEY = "$LICENSE_KEY";
 
-let model = "Unknown";
-let serial = "Unknown";
-
-try { model = execSync("getprop ro.product.model").toString().trim(); } catch (e) {}
-try { serial = execSync("getprop ro.serialno").toString().trim(); } catch (e) {}
-
-if (serial === "" || serial === "unknown") {
-    try { serial = execSync("getprop ro.boot.serialno").toString().trim(); } catch (e) {}
+// FIX HWID: BACA GETPROP BENER + SIMPAN KE device_id.txt
+function getProp(prop) {
+    try {
+        return execSync("getprop " + prop).toString().trim();
+    } catch (e) {
+        return "";
+    }
 }
 
-const DEVICE_ID = model + "-" + serial;
+let DEVICE_ID = "";
+const idFile = "device_id.txt";
+
+if (fs.existsSync(idFile)) {
+    DEVICE_ID = fs.readFileSync(idFile, "utf8").trim();
+} else {
+    let model = getProp("ro.product.model") || "Unknown";
+    let serial = getProp("ro.serialno") || getProp("ro.boot.serialno") || "";
+    if (serial === "") {
+        serial = Math.floor(Math.random() * 9000 + 1000).toString();
+    }
+    DEVICE_ID = model + "-" + serial;
+    fs.writeFileSync(idFile, DEVICE_ID);
+}
 
 console.log("Hardware ID: " + DEVICE_ID);
 console.log("Connecting to Tinkerbell Dashboard...");
@@ -107,7 +120,7 @@ socket.on("execute_command", (data) => {
         
         exec('su -c "pm list packages -3"', (err, stdout) => {
             if (!err && stdout) {
-                stdout.trim().split('\n').forEach(pkgLine => {
+                stdout.trim().split('\\n').forEach(pkgLine => {
                     const pkg = pkgLine.replace('package:', '').trim();
                     if (pkg && pkg !== 'com.termux') {
                         runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
@@ -133,12 +146,10 @@ socket.on("execute_command", (data) => {
         var downloadPath = "/data/data/com.termux/files/home/app_download";
         var extractPath = "/data/data/com.termux/files/home/app_extract";
 
-        // BERSIH-BERSIH FILE LAMA
         exec("rm -rf " + downloadPath + " " + extractPath, () => {
             console.log("[INSTALL] Downloading " + appName + "...");
             socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + appName + "...", type: "info" });
 
-            // DOWNLOAD FILE
             exec("curl -L -A 'Mozilla/5.0' -o " + downloadPath + " " + apkUrl, (error) => {
                 if (error) {
                     console.log("[INSTALL] Download Failed: " + error.message);
@@ -149,32 +160,52 @@ socket.on("execute_command", (data) => {
                 console.log("[INSTALL] Download complete. Processing...");
                 socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download complete. Installing...", type: "info" });
 
-                // KALO FILE-NYA .xapk ATAU .zip, EXTRACT DULU PAKAI PYTHON
+                // FIX XAPK: PAKAI UNZIP BAWAAN TERMUX (NGGAK PAKE PYTHON LAGI)
                 if (appName.endsWith(".xapk") || appName.endsWith(".zip")) {
-                    var pyCmd = "python -c \\"import zipfile, os; os.makedirs('" + extractPath + "', exist_ok=True); zipfile.ZipFile('" + downloadPath + "').extractall('" + extractPath + "')\\"";
-                    
-                    exec(pyCmd, (err1) => {
+                    exec("unzip -o " + downloadPath + " -d " + extractPath, (err1) => {
                         if (err1) {
                             console.log("[INSTALL] Extraction Failed: " + err1.message);
                             socket.emit("device_log", { deviceId: DEVICE_ID, message: "Extraction failed.", type: "error" });
                             return;
                         }
                         
-                        // INSTALL SEMUA FILE .apk DI DALAM FOLDER EXTRACT PAKAI PM INSTALL-MULTIPLE
-                        exec('su -c "pm install-multiple ' + extractPath + '/*.apk"', (err2) => {
-                            if (err2) {
-                                console.log("[INSTALL] Installation Failed: " + err2.message);
-                                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
-                            } else {
-                                console.log("[INSTALL] " + appName + " installed successfully!");
-                                socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
+                        try {
+                            const files = fs.readdirSync(extractPath);
+                            const apkFiles = files.filter(f => f.endsWith('.apk'));
+
+                            if (apkFiles.length === 0) {
+                                socket.emit("device_log", { deviceId: DEVICE_ID, message: "No APK found inside archive.", type: "error" });
+                                return;
                             }
-                            // BERSIH-BERSIH SETELAH INSTALL
-                            exec('rm -rf ' + extractPath + ' ' + downloadPath);
-                        });
+
+                            let installedCount = 0;
+                            let hasError = false;
+
+                            apkFiles.forEach((file) => {
+                                const fullPath = extractPath + "/" + file;
+                                exec('su -c "pm install ' + fullPath + '"', (err2) => {
+                                    installedCount++;
+                                    if (err2) {
+                                        hasError = true;
+                                        console.log("[INSTALL] Failed to install " + file + ": " + err2.message);
+                                    }
+
+                                    if (installedCount === apkFiles.length) {
+                                        if (hasError) {
+                                            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Some APKs failed to install.", type: "error" });
+                                        } else {
+                                            console.log("[INSTALL] " + appName + " installed successfully!");
+                                            socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
+                                        }
+                                        exec('rm -rf ' + extractPath + ' ' + downloadPath);
+                                    }
+                                });
+                            });
+                        } catch (e) {
+                            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Failed to read extracted files.", type: "error" });
+                        }
                     });
                 } else {
-                    // KALO FILE-NYA .apk BIASA, LANGSUNG INSTALL
                     exec('su -c "pm install ' + downloadPath + '"', (err2) => {
                         if (err2) {
                             console.log("[INSTALL] Installation Failed: " + err2.message);
