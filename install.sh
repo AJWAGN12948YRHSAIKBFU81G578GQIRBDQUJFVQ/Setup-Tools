@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer AWIKWOKKK ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer 0284812 ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -174,9 +174,15 @@ socket.on("execute_command", (data) => {
                                 return;
                             }
 
+                            // TRIK PROFESIONAL: Bikin file .sh sementara buat bypass limit panjang command
                             const apkPaths = apkFiles.map(f => extractPath + "/" + f).join(" ");
-                            // TAMBAHKAN -r -g --user 0 BUAT PAKSA INSTALL DI CLOUDPHONE
-                            const installCmd = "su -c 'pm install-multiple -r -g --user 0 " + apkPaths + "'";
+                            const scriptPath = extractPath + "/install_split.sh";
+                            
+                            // Tulis command pm install-multiple ke dalam file .sh
+                            fs.writeFileSync(scriptPath, "#!/system/bin/sh\npm install-multiple -r -g " + apkPaths + "\n");
+                            
+                            // Eksekusi file .sh tersebut sebagai root
+                            const installCmd = 'su -c "sh ' + scriptPath + '"';
                             
                             exec(installCmd, (err2, stdout, stderr) => {
                                 const output = (stdout || "") + (stderr || "");
@@ -186,7 +192,7 @@ socket.on("execute_command", (data) => {
                                 } else {
                                     console.log("[INSTALL] Installation Failed: " + output);
                                     // KIRIM PESAN ERROR ASLI DARI ANDROID KE DASHBOARD
-                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed: " + output.substring(0, 100), type: "error" });
+                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed: " + output.substring(0, 150), type: "error" });
                                 }
                                 exec('rm -rf ' + extractPath + ' ' + downloadPath);
                             });
