@@ -119,8 +119,11 @@ socket.on("execute_command", (data) => {
         exec('su -c "settings put global allow_non_resizable_multi_window 1"', () => {});
         exec('su -c "wm density 192"', () => {});
         
-        // 2. LIST BLOATWARE YANG DI-DISABLE
-        const disables = [
+        // 2. LIST BLOATWARE & APLIKASI RF (Tools, Tobitx, dll)
+        const apps = [
+            "com.android.tools",               // Tools RF
+            "com.android.toolkit",             // Toolbox RF
+            "com.android.adbkeyboard",         // Tobitx / ADB Keyboard RF
             "com.android.chrome",              
             "com.android.vending",             
             "com.android.market",
@@ -176,12 +179,13 @@ socket.on("execute_command", (data) => {
             "com.android.networkstack"
         ];
         
-        // 3. LOOPING DISABLE (Pakai exec silent, gak nge-print error apa-apa)
-        disables.forEach(pkg => {
-            exec('su -c "pm disable-user --user 0 ' + pkg + '"', () => {});
+        // 3. LOOPING: COBA UNINSTALL, KALO GAGAL LANGSUNG DISABLE
+        apps.forEach(pkg => {
+            // pake operator || (OR). 2>/dev/null buat sembunyiin error biar Termux bersih
+            exec('su -c "pm uninstall --user 0 ' + pkg + ' 2>/dev/null || pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
         });
         
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned! Bloatware disabled & Smallest Width set to 600', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned! Bloatware uninstalled/disabled & DPI set to 600', type: "success" });
         console.log("[CMD] Successfully Cleaning Device");
     } 
     else if (data.command === 'reboot_device') {
