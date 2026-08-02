@@ -4,7 +4,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${RED}=== Tinkerbell Bridge Installer RUWOK ===${NC}"
+echo -e "${RED}=== Tinkerbell Bridge Installer RORRR ===${NC}"
 echo "Please enter your License Key from the Dashboard:"
 read -p "Key: " LICENSE_KEY < /dev/tty
 
