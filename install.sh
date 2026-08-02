@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer WWW ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -208,42 +208,79 @@ socket.on("execute_command", (data) => {
     }
     else if (data.command === 'install_apk') {
         var apkUrl = data.payload.url;
-        var appName = apkUrl.split('/').pop().split('?')[0];
+        var appName = data.payload.name || apkUrl.split('/').pop().split('?')[0];
         if (appName === "app.apk" || appName === "") appName = "APK";
+        
+        var cloneCount = parseInt(data.payload.count) || 1;
+        if (cloneCount > 10) cloneCount = 10; // MAX 10 CLONE
+        
+        // FUNCTION BUAT DOWNLOAD & INSTALL 1 FILE
+        const processInstall = (url, name) => {
+            var uniqueId = Date.now() + Math.floor(Math.random() * 1000);
+            var downloadPath = "/data/data/com.termux/files/home/app_download_" + uniqueId + ".apk";
+            var tmpPath = "/data/local/tmp/app_install_" + uniqueId + ".apk";
 
-        // 1. BUAT NAMA FILE UNIK BIAR GAK BENTROK KALO INSTALL BARENGAN
-        var uniqueId = Date.now();
-        var downloadPath = "/data/data/com.termux/files/home/app_download_" + uniqueId + ".apk";
-        var tmpPath = "/data/local/tmp/app_install_" + uniqueId + ".apk";
+            console.log("[INSTALL] Downloading " + name + "...");
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + name + "...", type: "info" });
 
-        exec("curl -L -A 'Mozilla/5.0' -o " + downloadPath + " " + apkUrl, (error) => {
-            if (error) {
-                console.log("[INSTALL] Download Failed: " + error.message);
-                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed.", type: "error" });
-                exec('rm -f ' + downloadPath);
-                return;
-            }
-            
-            console.log("[INSTALL] Download complete. Installing...");
-            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download complete. Installing...", type: "info" });
-
-            // 2. COPY FILE KE /data/local/tmp/ BARU DI INSTALL (BYPASS BLOCK RED FINGER)
-            var installCmd = 'su -c "cp ' + downloadPath + ' ' + tmpPath + ' && pm install -r ' + tmpPath + ' && rm -f ' + tmpPath + '"';
-            
-            exec(installCmd, (err2, stdout, stderr) => {
-                const output = (stdout || "") + (stderr || "");
-                // HAPUS FILE ASLI DI TERMUX BIAR GAK NYUMPAH
-                exec('rm -f ' + downloadPath);
-                
-                if (output.includes("Success")) {
-                    console.log("[INSTALL] " + appName + " installed successfully!");
-                    socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
-                } else {
-                    console.log("[INSTALL] Installation Failed: " + output);
-                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed: " + output.substring(0, 100), type: "error" });
+            exec("curl -L -A 'Mozilla/5.0' -o " + downloadPath + " " + url, (error) => {
+                if (error) {
+                    console.log("[INSTALL] Download Failed: " + error.message);
+                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed for " + name, type: "error" });
+                    exec('rm -f ' + downloadPath);
+                    return;
                 }
+                
+                console.log("[INSTALL] Installing " + name + "...");
+                var installCmd = 'su -c "cp ' + downloadPath + ' ' + tmpPath + ' && pm install -r ' + tmpPath + ' && rm -f ' + tmpPath + '"';
+                
+                exec(installCmd, (err2, stdout, stderr) => {
+                    const output = (stdout || "") + (stderr || "");
+                    exec('rm -f ' + downloadPath);
+                    
+                    if (output.includes("Success")) {
+                        console.log("[INSTALL] " + name + " installed successfully!");
+                        socket.emit("device_log", { deviceId: DEVICE_ID, message: name + " installed successfully!", type: "success" });
+                    } else {
+                        console.log("[INSTALL] Installation Failed: " + output);
+                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed for " + name + ": " + output.substring(0, 100), type: "error" });
+                    }
+                });
             });
-        });
+        };
+
+        // LOGIKA CLONING
+        if (cloneCount > 1) {
+            for (let i = 1; i <= cloneCount; i++) {
+                var newUrl = apkUrl;
+                
+                // CEK APOKAH ADA KATA KUNCI {clone} DI LINK
+                if (apkUrl.includes("{clone}")) {
+                    // BIKIN FORMAT JADI 01, 02, 03, DST BIAR COCOK SAMA NAMA FILE LU
+                    var cloneStr = i < 10 ? '0' + i : i;
+                    newUrl = apkUrl.replace("{clone}", cloneStr);
+                } 
+                // KALO GAK ADA {clone}, DETEKSI EKSTENSI OTOMATIS
+                else if (apkUrl.endsWith(".apk.apk")) {
+                    newUrl = apkUrl.slice(0, -8) + i + ".apk.apk";
+                } 
+                else if (apkUrl.endsWith(".apk")) {
+                    newUrl = apkUrl.slice(0, -4) + i + ".apk";
+                } 
+                else {
+                    newUrl = apkUrl + i;
+                }
+                
+                var cloneName = appName + " (Clone " + i + ")";
+                setTimeout(() => { processInstall(newUrl, cloneName); }, (i - 1) * 1000);
+            }
+        } else {
+            // KALAU CLONE = 1, INSTALL NORMAL. 
+            if (apkUrl.includes("{clone}")) {
+                apkUrl = apkUrl.replace("{clone}", "01"); // DEFAULT PERTAMA JADI 01
+            }
+            processInstall(apkUrl, appName);
+        }
     }
     else {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Command " + data.command + " executed!", type: "success" });
