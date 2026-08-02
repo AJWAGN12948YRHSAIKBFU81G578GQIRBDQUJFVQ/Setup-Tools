@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer bejir ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer wewewew ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -109,18 +109,19 @@ socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
     if (data.command === 'clean_device') {
-        runCmd("su -c 'settings put global development_settings_enabled 1'");
-        runCmd("su -c 'settings put global enable_freeform_support 1'");
-        runCmd("su -c 'settings put global force_resizable_activities 1'");
-        runCmd("su -c 'settings put global allow_non_resizable_multi_window 1'");
-        runCmd("su -c 'wm density 640'");
+        // BALIK KE LOGIC ASLI LU
+        runCmd('su -c "settings put global development_settings_enabled 1"');
+        runCmd('su -c "settings put global enable_freeform_support 1"');
+        runCmd('su -c "settings put global force_resizable_activities 1"');
+        runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
+        runCmd('su -c "wm density 640"');
         
-        exec("su -c 'pm list packages -3'", (err, stdout) => {
+        exec('su -c "pm list packages -3"', (err, stdout) => {
             if (!err && stdout) {
                 stdout.trim().split('\\n').forEach(pkgLine => {
                     const pkg = pkgLine.replace('package:', '').trim();
                     if (pkg && pkg !== 'com.termux') {
-                        runCmd("su -c 'pm uninstall -k --user 0 " + pkg + "'");
+                        runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
                     }
                 });
             }
@@ -129,11 +130,12 @@ socket.on("execute_command", (data) => {
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
-        runCmd("su -c 'reboot'");
+        runCmd('su -c "reboot"');
     }
     else if (data.command === 'reset_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Wiping ALL apps & storage...', type: "success" });
-        runCmd("su -c 'pm list packages -3 | cut -d: -f2 | while read pkg; do pm uninstall --user 0 \$pkg; done; rm -rf /sdcard/*; rm -rf /storage/emulated/0/*; rm -rf /data/dalvik-cache/*; sleep 2; pm uninstall --user 0 com.termux; reboot'");
+        // BALIK KE LOGIC ASLI LU (Pake & dan \\"\\$pkg\\" persis kayak awal)
+        runCmd('su -c "(pm list packages -3 | cut -d: -f2 | while read pkg; do pm uninstall --user 0 \\"\\$pkg\\"; done; rm -rf /sdcard/*; rm -rf /storage/emulated/0/*; rm -rf /data/dalvik-cache/*; sleep 2; pm uninstall --user 0 com.termux; reboot) &"');
     }
     else if (data.command === 'install_apk') {
         var apkUrl = data.payload.url;
@@ -177,33 +179,28 @@ socket.on("execute_command", (data) => {
                             const apkPaths = apkFiles.map(f => extractPath + "/" + f);
                             const scriptPath = extractPath + "/install_split.sh";
                             
-                            // TRIK SESSION INSTALLER (BUAT BYPASS CLOUDPHONE YANG BLOK install-multiple)
                             let scriptContent = "#!/system/bin/sh\n";
-                            // Buat sesi install baru, ambil ID sesinya pake awk
                             scriptContent += "SESSION=$(pm install-create -r -g | awk -F'[][]' '{print $2}')\n";
                             scriptContent += "if [ -z \"$SESSION\" ]; then\n";
                             scriptContent += "  echo 'Failure [Create Session Failed]'\n";
                             scriptContent += "  exit 1\n";
                             scriptContent += "fi\n\n";
                             
-                            // Masukin tiap file APK ke sesi install satu per satu
                             apkPaths.forEach(path => {
                                 const name = path.split('/').pop();
-                                scriptContent += `SIZE=$(wc -c < "${path}")\n`;
-                                scriptContent += `pm install-write -S $SIZE $SESSION "${name}" "${path}" > /dev/null 2>&1\n`;
-                                scriptContent += `if [ $? -ne 0 ]; then\n`;
-                                scriptContent += `  pm install-abandon $SESSION > /dev/null 2>&1\n`;
-                                scriptContent += `  echo "Failure [Write Failed: ${name}]"\n`;
-                                scriptContent += `  exit 1\n`;
-                                scriptContent += `fi\n`;
+                                scriptContent += "SIZE=$(wc -c < \"" + path + "\")\n";
+                                scriptContent += "pm install-write -S $SIZE $SESSION \"" + name + "\" \"" + path + "\" > /dev/null 2>&1\n";
+                                scriptContent += "if [ $? -ne 0 ]; then\n";
+                                scriptContent += "  pm install-abandon $SESSION > /dev/null 2>&1\n";
+                                scriptContent += "  echo \"Failure [Write Failed: " + name + "]\"\n";
+                                scriptContent += "  exit 1\n";
+                                scriptContent += "fi\n";
                             });
                             
-                            // Eksekusi/install semua APK yang udah ditulis tadi
                             scriptContent += "pm install-commit $SESSION\n";
                             
                             fs.writeFileSync(scriptPath, scriptContent);
                             
-                            // Eksekusi file .sh tersebut sebagai root
                             const installCmd = 'su -c "sh ' + scriptPath + '"';
                             
                             exec(installCmd, (err2, stdout, stderr) => {
