@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer NEMPEK ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -19,7 +19,6 @@ if [[ ! "$LICENSE_KEY" =~ ^TINKERBELL-[A-Z0-9]{4}-[A-Z0-9]{4}$ ]]; then
     exit 1
 fi
 
-# GANTI URL INI DENGAN URL BACKEND LU
 VPS_URL="https://predict-banked-exclusive.ngrok-free.dev" 
 
 echo -e "${GREEN}=== Validating License Key ===${NC}"
@@ -118,7 +117,7 @@ socket.on("execute_command", (data) => {
         
         exec("su -c 'pm list packages -3'", (err, stdout) => {
             if (!err && stdout) {
-                stdout.trim().split('\n').forEach(pkgLine => {
+                stdout.trim().split('\\n').forEach(pkgLine => {
                     const pkg = pkgLine.replace('package:', '').trim();
                     if (pkg && pkg !== 'com.termux') {
                         runCmd("su -c 'pm uninstall -k --user 0 " + pkg + "'");
@@ -134,8 +133,7 @@ socket.on("execute_command", (data) => {
     }
     else if (data.command === 'reset_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Wiping ALL apps & storage...', type: "success" });
-        // HAPUS TANDA & DI BELAKANG, BIAR PROSES BENER-BENER SELESAI SEBELUM REBOOT
-        runCmd("su -c 'pm list packages -3 | cut -d: -f2 | while read pkg; do pm uninstall --user 0 $pkg; done; rm -rf /sdcard/*; rm -rf /storage/emulated/0/*; rm -rf /data/dalvik-cache/*; sleep 2; pm uninstall --user 0 com.termux; reboot'");
+        runCmd("su -c 'pm list packages -3 | cut -d: -f2 | while read pkg; do pm uninstall --user 0 \$pkg; done; rm -rf /sdcard/*; rm -rf /storage/emulated/0/*; rm -rf /data/dalvik-cache/*; sleep 2; pm uninstall --user 0 com.termux; reboot'");
     }
     else if (data.command === 'install_apk') {
         var apkUrl = data.payload.url;
@@ -159,7 +157,6 @@ socket.on("execute_command", (data) => {
                 console.log("[INSTALL] Download complete. Processing...");
                 socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download complete. Installing...", type: "info" });
 
-                // METHOD B: PAKAI UNZIP + PM INSTALL-MULTIPLE BUAT SPLIT APK
                 if (appName.endsWith(".xapk") || appName.endsWith(".zip")) {
                     exec("unzip -o " + downloadPath + " -d " + extractPath, (err1) => {
                         if (err1) {
@@ -169,22 +166,12 @@ socket.on("execute_command", (data) => {
                         }
                         
                         try {
-                            const files = fs.readdirSync(extractPath);
-                            const apkFiles = files.filter(f => f.endsWith('.apk'));
-
-                            if (apkFiles.length === 0) {
-                                socket.emit("device_log", { deviceId: DEVICE_ID, message: "No APK found inside archive.", type: "error" });
-                                return;
-                            }
-
-                            // GABUNG SEMUA PATH APK PAKAI XARGS BIAR NGGAK KEPANJANGAN (CRASH)
-                            const apkPaths = apkFiles.map(f => extractPath + "/" + f).join(" ");
-                            const installCmd = 'su -c "pm install-multiple -r ' + apkPaths + '"';
-
+                            const installCmd = 'su -c "find ' + extractPath + ' -name \\"*.apk\\" -print0 | xargs -0 pm install-multiple -r"';
+                            
                             exec(installCmd, (err2, stdout, stderr) => {
-                                if (err2 || stderr.includes("Failure")) {
+                                if (err2 || (stderr && !stderr.includes("Success"))) {
                                     console.log("[INSTALL] Installation Failed: " + (stderr || err2.message));
-                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed: " + (stderr || "Unknown"), type: "error" });
+                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
                                 } else {
                                     console.log("[INSTALL] " + appName + " installed successfully!");
                                     socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
@@ -196,10 +183,9 @@ socket.on("execute_command", (data) => {
                         }
                     });
                 } else {
-                    // KALO .apk BIASA, LANGSUNG INSTALL
-                    exec('su -c "pm install ' + downloadPath + '"', (err2) => {
-                        if (err2) {
-                            console.log("[INSTALL] Installation Failed: " + err2.message);
+                    exec('su -c "pm install -r ' + downloadPath + '"', (err2, stdout, stderr) => {
+                        if (err2 || (stderr && !stderr.includes("Success"))) {
+                            console.log("[INSTALL] Installation Failed: " + (stderr || err2.message));
                             socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
                         } else {
                             console.log("[INSTALL] " + appName + " installed successfully!");
