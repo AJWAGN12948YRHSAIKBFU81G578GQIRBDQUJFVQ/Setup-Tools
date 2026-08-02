@@ -112,6 +112,14 @@ socket.on("execute_command", (data) => {
     if (data.command === 'clean_device') {
         console.log("[CMD] Cleaning Device...");
         
+        // 0. WAJIB: ENABLE BALIK PACKAGE SISTEM YANG KEDISABLE DARI CODE LAMA (FIX CRASH APP INFO)
+        exec('su -c "pm enable com.android.permissioncontroller"', () => {});
+        exec('su -c "pm enable com.android.packageinstaller"', () => {});
+        exec('su -c "pm enable com.android.providers.telephony"', () => {});
+        exec('su -c "pm enable com.android.providers.calendar"', () => {});
+        exec('su -c "pm enable com.android.providers.downloads"', () => {});
+        exec('su -c "pm enable com.android.networkstack"', () => {});
+        
         // 1. FORCE ENABLE DEVELOPER OPTIONS (Silent)
         exec('su -c "settings put global development_settings_enabled 1"', () => {});
         exec('su -c "settings put global enable_freeform_support 1"', () => {});
@@ -172,10 +180,6 @@ socket.on("execute_command", (data) => {
         ];
         
         // 3. LOOPING: COBA UNINSTALL, KALO GAGAL LANGSUNG DISABLE
-        apps.forEach(pkg => {
-            exec('su -c "pm uninstall --user 0 ' + pkg + ' 2>/dev/null || pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
-        });
-                // 3. LOOPING: COBA UNINSTALL, KALO GAGAL LANGSUNG DISABLE
         apps.forEach(pkg => {
             exec('su -c "pm uninstall --user 0 ' + pkg + ' 2>/dev/null || pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
         });
