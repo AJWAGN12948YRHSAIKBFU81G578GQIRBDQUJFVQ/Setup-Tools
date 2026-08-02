@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer WEWEWE ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -47,14 +47,15 @@ cd tinkerbell-bridge
 npm init -y > /dev/null 2>&1
 npm install socket.io-client > /dev/null 2>&1
 
-# KITA BALIKIN KE CAT EOF ASLI LU, TAPI GUA PASTIKAN VARIABEL BASH GAK NGANGGU KODE NODE.JS
-cat << EOF > bridge.js
+# PAKAI 'EOF' (KUTIP SATU) SUPAYA BASH GAK MERUSAK KODE NODE.JS LU!
+cat << 'EOF' > bridge.js
 const { io } = require("socket.io-client");
 const { exec, execSync } = require("child_process");
 const fs = require("fs");
 
-const VPS_URL = "$VPS_URL"; 
-const LICENSE_KEY = "$LICENSE_KEY";
+// AMBIL URL & KEY DARI ARGUMENT (100% AMAN DARI BASH)
+const VPS_URL = process.argv[2]; 
+const LICENSE_KEY = process.argv[3];
 
 function getProp(prop) {
     try {
@@ -114,19 +115,21 @@ socket.on("execute_command", (data) => {
         runCmd('su -c "settings put global enable_freeform_support 1"');
         runCmd('su -c "settings put global force_resizable_activities 1"');
         runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
-        runCmd('su -c "wm density 640"');
+        // UBAH KE 600 SESUAI PERMINTAAN LU
+        runCmd('su -c "wm density 600"');
         
         exec('su -c "pm list packages -3"', (err, stdout) => {
             if (!err && stdout) {
-                stdout.trim().split('\\n').forEach(pkgLine => {
+                stdout.trim().split('\n').forEach(pkgLine => {
                     const pkg = pkgLine.replace('package:', '').trim();
                     if (pkg && pkg !== 'com.termux') {
-                        runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
+                        // HAPUS -k SUPAYA CACHE/DATA NYA JUGA KEHAPUS BERSIH
+                        runCmd('su -c "pm uninstall --user 0 ' + pkg + '"');
                     }
                 });
             }
         });
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 640', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 600', type: "success" });
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
@@ -134,7 +137,8 @@ socket.on("execute_command", (data) => {
     }
     else if (data.command === 'reset_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Wiping ALL apps & storage...', type: "success" });
-        runCmd('su -c "(pm list packages -3 | cut -d: -f2 | while read pkg; do pm uninstall --user 0 \\"\\$pkg\\"; done; rm -rf /sdcard/*; rm -rf /storage/emulated/0/*; rm -rf /data/dalvik-cache/*; sleep 2; pm uninstall --user 0 com.termux; reboot) &"');
+        // INI LOGIC ASLI LU, KARNA PAKAI 'EOF' BASH NGGAK BAKAL NGUTAK ATIK $pkg ATAU TANDA KUTIP LAGI!
+        runCmd('su -c "(pm list packages -3 | cut -d: -f2 | while read pkg; do pm uninstall --user 0 \"$pkg\"; done; rm -rf /sdcard/*; rm -rf /storage/emulated/0/*; rm -rf /data/dalvik-cache/*; sleep 2; pm uninstall --user 0 com.termux; reboot) &"');
     }
     else if (data.command === 'install_apk') {
         var apkUrl = data.payload.url;
@@ -157,7 +161,6 @@ socket.on("execute_command", (data) => {
                 console.log("[INSTALL] Download complete. Installing...");
                 socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download complete. Installing...", type: "info" });
 
-                // BALIK KE PM INSTALL -R BIASA BUAT APK TUNGGAL
                 exec('su -c "pm install -r ' + downloadPath + '"', (err2, stdout, stderr) => {
                     const output = (stdout || "") + (stderr || "");
                     if (output.includes("Success")) {
@@ -181,4 +184,5 @@ socket.on("disconnect", () => { console.log("Disconnected. Reconnecting..."); })
 EOF
 
 echo -e "${GREEN}=== Starting Tinkerbell Bridge ===${NC}"
-node bridge.js
+# KIRIM VPS_URL & LICENSE_KEY SEBAGAI ARGUMENT KE NODE.JS
+node bridge.js "$VPS_URL" "$LICENSE_KEY"
