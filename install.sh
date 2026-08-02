@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer WWW ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -211,34 +211,37 @@ socket.on("execute_command", (data) => {
         var appName = apkUrl.split('/').pop().split('?')[0];
         if (appName === "app.apk" || appName === "") appName = "APK";
 
-        var downloadPath = "/data/data/com.termux/files/home/app_download";
+        // 1. BUAT NAMA FILE UNIK BIAR GAK BENTROK KALO INSTALL BARENGAN
+        var uniqueId = Date.now();
+        var downloadPath = "/data/data/com.termux/files/home/app_download_" + uniqueId + ".apk";
+        var tmpPath = "/data/local/tmp/app_install_" + uniqueId + ".apk";
 
-        exec("rm -rf " + downloadPath, () => {
-            console.log("[INSTALL] Downloading " + appName + "...");
-            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + appName + "...", type: "info" });
+        exec("curl -L -A 'Mozilla/5.0' -o " + downloadPath + " " + apkUrl, (error) => {
+            if (error) {
+                console.log("[INSTALL] Download Failed: " + error.message);
+                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed.", type: "error" });
+                exec('rm -f ' + downloadPath);
+                return;
+            }
+            
+            console.log("[INSTALL] Download complete. Installing...");
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download complete. Installing...", type: "info" });
 
-            exec("curl -L -A 'Mozilla/5.0' -o " + downloadPath + " " + apkUrl, (error) => {
-                if (error) {
-                    console.log("[INSTALL] Download Failed: " + error.message);
-                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed.", type: "error" });
-                    return;
-                }
+            // 2. COPY FILE KE /data/local/tmp/ BARU DI INSTALL (BYPASS BLOCK RED FINGER)
+            var installCmd = 'su -c "cp ' + downloadPath + ' ' + tmpPath + ' && pm install -r ' + tmpPath + ' && rm -f ' + tmpPath + '"';
+            
+            exec(installCmd, (err2, stdout, stderr) => {
+                const output = (stdout || "") + (stderr || "");
+                // HAPUS FILE ASLI DI TERMUX BIAR GAK NYUMPAH
+                exec('rm -f ' + downloadPath);
                 
-                console.log("[INSTALL] Download complete. Installing...");
-                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download complete. Installing...", type: "info" });
-
-                // BALIK KE PM INSTALL -R BIASA BUAT APK TUNGGAL
-                exec('su -c "pm install -r ' + downloadPath + '"', (err2, stdout, stderr) => {
-                    const output = (stdout || "") + (stderr || "");
-                    if (output.includes("Success")) {
-                        console.log("[INSTALL] " + appName + " installed successfully!");
-                        socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
-                    } else {
-                        console.log("[INSTALL] Installation Failed: " + output);
-                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed: " + output.substring(0, 100), type: "error" });
-                    }
-                    exec('rm -f ' + downloadPath);
-                });
+                if (output.includes("Success")) {
+                    console.log("[INSTALL] " + appName + " installed successfully!");
+                    socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
+                } else {
+                    console.log("[INSTALL] Installation Failed: " + output);
+                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed: " + output.substring(0, 100), type: "error" });
+                }
             });
         });
     }
