@@ -4,9 +4,13 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${RED}=== Tinkerbell Bridge Installer RORRR ===${NC}"
-echo "Please enter your License Key from the Dashboard:"
-read -p "Key: " LICENSE_KEY < /dev/tty
+LICENSE_KEY=$1
+
+if [ -z "$LICENSE_KEY" ]; then
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+    echo "Please enter your License Key from the Dashboard:"
+    read -p "Key: " LICENSE_KEY < /dev/tty
+fi
 
 LICENSE_KEY=$(echo $LICENSE_KEY | tr -d ' ' | head -n1 | tr -d '\r\n')
 
@@ -27,12 +31,13 @@ if [[ "$VALIDATION" != *"License valid"* ]]; then
 fi
 
 echo -e "${GREEN}License Valid! Proceeding with installation...${NC}"
+
 echo -e "${GREEN}=== Cleaning Previous Installation ===${NC}"
 rm -rf ~/tinkerbell-bridge
 
 echo -e "${GREEN}=== Installing Required Packages ===${NC}"
 pkg update -y
-pkg install nodejs-lts -y
+pkg install nodejs python -y
 
 echo -e "${GREEN}=== Setting Up Bridge Environment ===${NC}"
 cd ~
@@ -44,8 +49,7 @@ npm install socket.io-client > /dev/null 2>&1
 
 cat << EOF > bridge.js
 const { io } = require("socket.io-client");
-const { exec, execSync } = require("child_process");
-const fs = require("fs");
+const { exec } = require("child_process");
 
 const VPS_URL = "$VPS_URL"; 
 const LICENSE_KEY = "$LICENSE_KEY";
@@ -85,139 +89,101 @@ socket.on("connect_error", (err) => {
 
 const runCmd = (cmd) => {
     exec(cmd, (error, stdout, stderr) => {
-        if (error) console.log("Cmd error: " + error.message.split("\n")[0]);
+        if (error) console.log("Cmd error: " + error.message);
     });
 };
 
 socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
-    const { execSync } = require("child_process");
-    const fs = require("fs");
-    
-    const runCmd = (cmd) => {
-        try { 
-            execSync(cmd, { stdio: 'ignore' }); 
-        } catch (e) {}
-    };
-
     if (data.command === 'clean_device') {
-        console.log("Cleaning device & setting up...");
-        
         runCmd('su -c "settings put global development_settings_enabled 1"');
         runCmd('su -c "settings put global enable_freeform_support 1"');
         runCmd('su -c "settings put global force_resizable_activities 1"');
         runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
+        runCmd('su -c "wm density 640"');
         
-        let targetDensity = 240;
-        try {
-            const sizeOutput = execSync('su -c "wm size"', { encoding: 'utf8' });
-            const match = sizeOutput.match(/(\d+)x(\d+)/);
-            if (match) {
-                const w = parseInt(match[1]);
-                const h = parseInt(match[2]);
-                const shortEdge = Math.min(w, h);
-                targetDensity = Math.round((shortEdge / 600) * 160);
+        exec('su -c "pm list packages -3"', (err, stdout) => {
+            if (!err && stdout) {
+                stdout.trim().split('\n').forEach(pkgLine => {
+                    const pkg = pkgLine.replace('package:', '').trim();
+                    if (pkg && pkg !== 'com.termux') {
+                        runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
+                    }
+                });
             }
-        } catch (e) {}
-        
-        runCmd('su -c "wm density ' + targetDensity + '"');
-        
-        try {
-            const packages = execSync('su -c "pm list packages -3"', { encoding: 'utf8' }).trim().split('\n');
-            packages.forEach(pkgLine => {
-                const pkg = pkgLine.replace('package:', '').trim();
-                if (pkg && pkg !== 'com.termux') {
-                    runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
-                }
-            });
-        } catch (e) {}
-
-        const disableApps = [
-            'com.android.inputmethod.latin', 
-            'com.android.calendar',          
-            'com.android.chrome',            
-            'com.android.deskclock',         
-            'com.android.contacts',          
-            'com.android.email',             
-            'com.google.android.apps.nbu.files',
-            'com.android.gallery3d',         
-            'com.google.android.inputmethod.latin',
-            'com.google.android.play.games', 
-            'com.android.vending',           
-            'com.google.android.gms',        
-            'com.android.quicksearchbox',    
-            'com.android.messaging',         
-            'com.android.dialer',            
-            'com.android.tools',             
-            'com.android.toolkit',           
-            'com.android.market'             
-        ];
-        
-        disableApps.forEach(pkg => {
-            runCmd('su -c "pm disable-user --user 0 ' + pkg + '"');
         });
-
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned, Smallest Width set to 600dp, bloatware disabled.', type: "success" });
-        console.log("Clean device finished.");
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 640', type: "success" });
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
         runCmd('su -c "reboot"');
     }
     else if (data.command === 'reset_device') {
-        console.log("Factory resetting device to fresh state...");
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Wiping ALL apps & storage...', type: "success" });
-        
-        const wipeScript = "#!/system/bin/sh\n" +
-        "pm list packages -3 | cut -d: -f2 | while read pkg; do\n" +
-        "    if [ \"$pkg\" != \"com.termux\" ]; then\n" +
-        "        pm uninstall --user 0 \"$pkg\"\n" +
-        "    fi\n" +
-        "done\n" +
-        "rm -rf /sdcard/*\n" +
-        "rm -rf /storage/emulated/0/*\n" +
-        "rm -rf /data/dalvik-cache/*\n" +
-        "sleep 2\n" +
-        "pm uninstall --user 0 com.termux\n" +
-        "reboot";
-        
-        try {
-            fs.writeFileSync('/data/data/com.termux/files/home/wipe.sh', wipeScript);
-            runCmd('su -c "sh /data/data/com.termux/files/home/wipe.sh"');
-        } catch (e) {}
+        runCmd('su -c "(pm list packages -3 | cut -d: -f2 | while read pkg; do pm uninstall --user 0 \\"\\$pkg\\"; done; rm -rf /sdcard/*; rm -rf /storage/emulated/0/*; rm -rf /data/dalvik-cache/*; sleep 2; pm uninstall --user 0 com.termux; reboot) &"');
     }
     else if (data.command === 'install_apk') {
         var apkUrl = data.payload.url;
         var appName = apkUrl.split('/').pop().split('?')[0];
         if (appName === "app.apk" || appName === "") appName = "APK";
 
-        var apkPath = "/data/data/com.termux/files/home/app.apk";
+        var downloadPath = "/data/data/com.termux/files/home/app_download";
+        var extractPath = "/data/data/com.termux/files/home/app_extract";
 
-        // HAPUS FILE LAMA YANG CORUPT
-        exec("rm -f " + apkPath, () => {
+        // BERSIH-BERSIH FILE LAMA
+        exec("rm -rf " + downloadPath + " " + extractPath, () => {
             console.log("[INSTALL] Downloading " + appName + "...");
             socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + appName + "...", type: "info" });
 
-            exec("curl -L -A 'Mozilla/5.0' -o " + apkPath + " " + apkUrl, (error, stdout, stderr) => {
+            // DOWNLOAD FILE
+            exec("curl -L -A 'Mozilla/5.0' -o " + downloadPath + " " + apkUrl, (error) => {
                 if (error) {
                     console.log("[INSTALL] Download Failed: " + error.message);
                     socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed.", type: "error" });
                     return;
                 }
                 
-                console.log("[INSTALL] Download complete. Installing...");
+                console.log("[INSTALL] Download complete. Processing...");
                 socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download complete. Installing...", type: "info" });
 
-                exec('su -c "pm install ' + apkPath + '"', (err2, stdout2, stderr2) => {
-                    if (err2) {
-                        console.log("[INSTALL] Installation Failed: " + err2.message);
-                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
-                    } else {
-                        console.log("[INSTALL] " + appName + " installed successfully!");
-                        socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
-                    }
-                });
+                // KALO FILE-NYA .xapk ATAU .zip, EXTRACT DULU PAKAI PYTHON
+                if (appName.endsWith(".xapk") || appName.endsWith(".zip")) {
+                    var pyCmd = "python -c \\"import zipfile, os; os.makedirs('" + extractPath + "', exist_ok=True); zipfile.ZipFile('" + downloadPath + "').extractall('" + extractPath + ')\\"';
+                    
+                    exec(pyCmd, (err1) => {
+                        if (err1) {
+                            console.log("[INSTALL] Extraction Failed: " + err1.message);
+                            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Extraction failed.", type: "error" });
+                            return;
+                        }
+                        
+                        // CARI FILE .apk DI DALAM FOLDER EXTRACT, LALU INSTALL PAKAI ROOT
+                        exec('su -c "find ' + extractPath + ' -name \\"*.apk\\" -exec pm install {} \\"', (err2) => {
+                            if (err2) {
+                                console.log("[INSTALL] Installation Failed: " + err2.message);
+                                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
+                            } else {
+                                console.log("[INSTALL] " + appName + " installed successfully!");
+                                socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
+                            }
+                            // BERSIH-BERSIH SETELAH INSTALL
+                            exec('rm -rf ' + extractPath + ' ' + downloadPath);
+                        });
+                    });
+                } else {
+                    // KALO FILE-NYA .apk BIASA, LANGSUNG INSTALL
+                    exec('su -c "pm install ' + downloadPath + '"', (err2) => {
+                        if (err2) {
+                            console.log("[INSTALL] Installation Failed: " + err2.message);
+                            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
+                        } else {
+                            console.log("[INSTALL] " + appName + " installed successfully!");
+                            socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
+                        }
+                        exec('rm -f ' + downloadPath);
+                    });
+                }
             });
         });
     }
@@ -230,15 +196,4 @@ socket.on("disconnect", () => { console.log("Disconnected. Reconnecting..."); })
 EOF
 
 echo -e "${GREEN}=== Starting Tinkerbell Bridge ===${NC}"
-while true; do
-    node bridge.js
-    EXIT_CODE=$?
-    
-    if [ $EXIT_CODE -eq 1 ]; then
-        echo "[!] Script stopped due to device limit or invalid license."
-        break
-    fi
-    
-    echo "[!] Connection lost. Reconnecting in 5 seconds..."
-    sleep 5
-done
+node bridge.js
