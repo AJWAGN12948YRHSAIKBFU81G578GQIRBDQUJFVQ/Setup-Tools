@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer TEMPEK ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer TUROK ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -110,61 +110,80 @@ socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
     if (data.command === 'clean_device') {
-        // 1. FORCE ENABLE DEVELOPER OPTIONS (BIAR GAK PERLU NGETAP 7X BUILD NUMBER)
+        // 1. FORCE ENABLE DEVELOPER OPTIONS
         runCmd('su -c "settings put global development_settings_enabled 1"');
         
-        // 2. SETUP SISTEM BUAT BOTTING (FREEFORM WINDOWS & RESIZABLE)
+        // 2. SETUP SISTEM BUAT BOTTING
         runCmd('su -c "settings put global enable_freeform_support 1"');
         runCmd('su -c "settings put global force_resizable_activities 1"');
         runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
         
-        // 3. SET SMALLEST WIDTH / DPI (600)
+        // 3. SET SMALLEST WIDTH KE 600 (DPI 192)
         runCmd('su -c "wm density 192"');
         
-        // 4. LIST BLOATWARE YANG WAJIB DIUNINSTALL (RAM LEGA, GAK GANGGU SISTEM RF)
-        const uninstalls = [
-            "com.android.chrome",              // Google Chrome
-            "com.android.vending",             // Play Store (biar gak auto-update ganggu bot)
-            "com.google.android.play.games",   // Play Games
-            "com.google.android.apps.nbu.files", // Google Files
-            "com.android.contacts",            // Kontak
-            "com.android.messaging",           // SMS/Messaging
-            "com.android.mms.service",         // MMS Service
-            "com.android.dialer",              // Telepon
-            "com.android.calendar",            // Kalender
+        // 4. LIST BLOATWARE YANG DI-DISABLE (RAM LEGA, GAK NGILANGIN FILE SISTEM)
+        const disables = [
+            "com.android.chrome",              
+            "com.android.vending",             // Play Store
+            "com.android.market",
+            "com.google.android.play.games",
+            "com.google.android.apps.nbu.files",
+            "com.android.contacts",
+            "com.android.messaging",
+            "com.android.mms.service",
+            "com.android.dialer",
+            "com.android.calendar",
             "com.android.deskclock",           // Jam
-            "com.android.gallery3d",           // Galeri
-            "com.android.music",               // Musik
-            "com.android.soundrecorder",       // Recorder
-            "com.android.email",               // Email
-            "com.android.quicksearchbox",      // Search Box
-            "com.android.egg",                 // Android Easter Egg (sampah)
-            "com.android.printspooler",        // Print
-            "com.android.bips",                // Print Service
+            "com.android.gallery3d",
+            "com.android.music",
+            "com.android.musicfx",
+            "com.android.soundrecorder",
+            "com.android.email",
+            "com.android.quicksearchbox",
+            "com.android.egg",                 // Easter Egg
+            "com.android.printspooler",
+            "com.android.bips",
             "com.android.printservice.recommendation",
             "com.android.dreams.basic",        // Screensaver
-            "com.android.dreams.phototable",   // Screensaver Photo
-            "com.android.bluetoothmidiservice" // Bluetooth MIDI
+            "com.android.dreams.phototable",
+            "com.android.bluetoothmidiservice",
+            "com.android.bluetooth",
+            "com.android.nfc",
+            "com.android.providers.downloads.ui",
+            "com.android.providers.downloads",
+            "com.android.hotspot2",
+            "com.android.inputmethod.latin",   // Keyboard Bawaan
+            "com.google.android.inputmethod.latin", // Gboard
+            "com.android.bookmarkprovider",
+            "com.android.cellbroadcastreceiver",
+            "com.android.emergency",
+            "com.android.ons",
+            "com.android.simappdialog",
+            "com.android.carrierconfig",
+            "com.android.carrierdefaultapp",
+            "com.android.networkstack.permissionconfig",
+            "com.android.captiveportallogin",
+            "com.android.localtransport",
+            "com.android.proxyhandler",
+            "com.android.sharedstoragebackup",
+            "com.android.statementservice",
+            "com.android.calllogbackup",
+            "com.android.backupconfirm",
+            "com.android.providers.userdictionary",
+            "com.android.providers.blockednumber",
+            "com.android.providers.calendar",
+            "com.android.providers.telephony",
+            "com.android.permissioncontroller",
+            "com.android.packageinstaller",
+            "com.android.networkstack"
         ];
         
-        uninstalls.forEach(pkg => {
-            runCmd('su -c "pm uninstall --user 0 ' + pkg + '"');
-        });
-
-        // 5. LIST YANG SAFE DI-DISABLE (Pakai disable-user biar tetap aman)
-        const disables = [
-            "com.android.providers.downloads.ui", // Download UI
-            "com.android.providers.downloads",    // Download Manager
-            "com.android.hotspot2",               // Hotspot
-            "com.android.bluetooth",              // Bluetooth
-            "com.android.nfc"                     // NFC
-        ];
-        
+        // LOOPING DAN DISABLE SEMUA PACKAGE DI ATAS
         disables.forEach(pkg => {
             runCmd('su -c "pm disable-user --user 0 ' + pkg + '"');
         });
         
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned, DPI set to 600, bloatware removed!', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned! Bloatware disabled & Smallest Width set to 600', type: "success" });
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
