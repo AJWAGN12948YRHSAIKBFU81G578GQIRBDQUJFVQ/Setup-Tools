@@ -119,7 +119,7 @@ socket.on("execute_command", (data) => {
         exec('su -c "settings put global allow_non_resizable_multi_window 1"', () => {});
         exec('su -c "wm density 192"', () => {});
         
-        // 2. LIST BLOATWARE & APLIKASI RF (Tools, Tobitx, dll)
+        // 2. LIST BLOATWARE YANG AMAN DI-UNINSTALL/DISABLE
         const apps = [
             "com.android.tools",               // Tools RF
             "com.android.toolkit",             // Toolbox RF
@@ -151,10 +151,7 @@ socket.on("execute_command", (data) => {
             "com.android.bluetooth",
             "com.android.nfc",
             "com.android.providers.downloads.ui",
-            "com.android.providers.downloads",
             "com.android.hotspot2",
-            "com.android.inputmethod.latin",   
-            "com.google.android.inputmethod.latin", 
             "com.android.bookmarkprovider",
             "com.android.cellbroadcastreceiver",
             "com.android.emergency",
@@ -171,19 +168,20 @@ socket.on("execute_command", (data) => {
             "com.android.calllogbackup",
             "com.android.backupconfirm",
             "com.android.providers.userdictionary",
-            "com.android.providers.blockednumber",
-            "com.android.providers.calendar",
-            "com.android.providers.telephony",
-            "com.android.permissioncontroller",
-            "com.android.packageinstaller",
-            "com.android.networkstack"
+            "com.android.providers.blockednumber"
         ];
         
         // 3. LOOPING: COBA UNINSTALL, KALO GAGAL LANGSUNG DISABLE
         apps.forEach(pkg => {
-            // pake operator || (OR). 2>/dev/null buat sembunyiin error biar Termux bersih
             exec('su -c "pm uninstall --user 0 ' + pkg + ' 2>/dev/null || pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
         });
+                // 3. LOOPING: COBA UNINSTALL, KALO GAGAL LANGSUNG DISABLE
+        apps.forEach(pkg => {
+            exec('su -c "pm uninstall --user 0 ' + pkg + ' 2>/dev/null || pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
+        });
+        
+        // 4. BERSIHKAN SHORTCUT IKLAN DI HOME SCREEN (LAUNCHER)
+        exec('su -c "pm clear com.android.launcher3"', () => {});
         
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned! Bloatware uninstalled/disabled & DPI set to 600', type: "success" });
         console.log("[CMD] Successfully Cleaning Device");
