@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer wewewew ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -47,6 +47,7 @@ cd tinkerbell-bridge
 npm init -y > /dev/null 2>&1
 npm install socket.io-client > /dev/null 2>&1
 
+# KITA BALIKIN KE CAT EOF ASLI LU, TAPI GUA PASTIKAN VARIABEL BASH GAK NGANGGU KODE NODE.JS
 cat << EOF > bridge.js
 const { io } = require("socket.io-client");
 const { exec, execSync } = require("child_process");
@@ -109,7 +110,6 @@ socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
     if (data.command === 'clean_device') {
-        // BALIK KE LOGIC ASLI LU
         runCmd('su -c "settings put global development_settings_enabled 1"');
         runCmd('su -c "settings put global enable_freeform_support 1"');
         runCmd('su -c "settings put global force_resizable_activities 1"');
@@ -134,7 +134,6 @@ socket.on("execute_command", (data) => {
     }
     else if (data.command === 'reset_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Wiping ALL apps & storage...', type: "success" });
-        // BALIK KE LOGIC ASLI LU (Pake & dan \\"\\$pkg\\" persis kayak awal)
         runCmd('su -c "(pm list packages -3 | cut -d: -f2 | while read pkg; do pm uninstall --user 0 \\"\\$pkg\\"; done; rm -rf /sdcard/*; rm -rf /storage/emulated/0/*; rm -rf /data/dalvik-cache/*; sleep 2; pm uninstall --user 0 com.termux; reboot) &"');
     }
     else if (data.command === 'install_apk') {
@@ -143,9 +142,8 @@ socket.on("execute_command", (data) => {
         if (appName === "app.apk" || appName === "") appName = "APK";
 
         var downloadPath = "/data/data/com.termux/files/home/app_download";
-        var extractPath = "/data/data/com.termux/files/home/app_extract";
 
-        exec("rm -rf " + downloadPath + " " + extractPath, () => {
+        exec("rm -rf " + downloadPath, () => {
             console.log("[INSTALL] Downloading " + appName + "...");
             socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + appName + "...", type: "info" });
 
@@ -156,80 +154,21 @@ socket.on("execute_command", (data) => {
                     return;
                 }
                 
-                console.log("[INSTALL] Download complete. Processing...");
+                console.log("[INSTALL] Download complete. Installing...");
                 socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download complete. Installing...", type: "info" });
 
-                if (appName.endsWith(".xapk") || appName.endsWith(".zip")) {
-                    exec("unzip -o " + downloadPath + " -d " + extractPath, (err1) => {
-                        if (err1) {
-                            console.log("[INSTALL] Extraction Failed: " + err1.message);
-                            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Extraction failed.", type: "error" });
-                            return;
-                        }
-                        
-                        try {
-                            const files = fs.readdirSync(extractPath);
-                            const apkFiles = files.filter(f => f.endsWith('.apk'));
-
-                            if (apkFiles.length === 0) {
-                                socket.emit("device_log", { deviceId: DEVICE_ID, message: "No APK found inside archive.", type: "error" });
-                                return;
-                            }
-
-                            const apkPaths = apkFiles.map(f => extractPath + "/" + f);
-                            const scriptPath = extractPath + "/install_split.sh";
-                            
-                            let scriptContent = "#!/system/bin/sh\n";
-                            scriptContent += "SESSION=$(pm install-create -r -g | awk -F'[][]' '{print $2}')\n";
-                            scriptContent += "if [ -z \"$SESSION\" ]; then\n";
-                            scriptContent += "  echo 'Failure [Create Session Failed]'\n";
-                            scriptContent += "  exit 1\n";
-                            scriptContent += "fi\n\n";
-                            
-                            apkPaths.forEach(path => {
-                                const name = path.split('/').pop();
-                                scriptContent += "SIZE=$(wc -c < \"" + path + "\")\n";
-                                scriptContent += "pm install-write -S $SIZE $SESSION \"" + name + "\" \"" + path + "\" > /dev/null 2>&1\n";
-                                scriptContent += "if [ $? -ne 0 ]; then\n";
-                                scriptContent += "  pm install-abandon $SESSION > /dev/null 2>&1\n";
-                                scriptContent += "  echo \"Failure [Write Failed: " + name + "]\"\n";
-                                scriptContent += "  exit 1\n";
-                                scriptContent += "fi\n";
-                            });
-                            
-                            scriptContent += "pm install-commit $SESSION\n";
-                            
-                            fs.writeFileSync(scriptPath, scriptContent);
-                            
-                            const installCmd = 'su -c "sh ' + scriptPath + '"';
-                            
-                            exec(installCmd, (err2, stdout, stderr) => {
-                                const output = (stdout || "") + (stderr || "");
-                                if (output.includes("Success")) {
-                                    console.log("[INSTALL] " + appName + " installed successfully!");
-                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
-                                } else {
-                                    console.log("[INSTALL] Installation Failed: " + output);
-                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed: " + output.substring(0, 150), type: "error" });
-                                }
-                                exec('rm -rf ' + extractPath + ' ' + downloadPath);
-                            });
-                        } catch (e) {
-                            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Failed to read extracted files.", type: "error" });
-                        }
-                    });
-                } else {
-                    exec('su -c "pm install -r ' + downloadPath + '"', (err2, stdout, stderr) => {
-                        if (err2 || (stderr && !stderr.includes("Success"))) {
-                            console.log("[INSTALL] Installation Failed: " + (stderr || err2.message));
-                            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
-                        } else {
-                            console.log("[INSTALL] " + appName + " installed successfully!");
-                            socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
-                        }
-                        exec('rm -f ' + downloadPath);
-                    });
-                }
+                // BALIK KE PM INSTALL -R BIASA BUAT APK TUNGGAL
+                exec('su -c "pm install -r ' + downloadPath + '"', (err2, stdout, stderr) => {
+                    const output = (stdout || "") + (stderr || "");
+                    if (output.includes("Success")) {
+                        console.log("[INSTALL] " + appName + " installed successfully!");
+                        socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
+                    } else {
+                        console.log("[INSTALL] Installation Failed: " + output);
+                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed: " + output.substring(0, 100), type: "error" });
+                    }
+                    exec('rm -f ' + downloadPath);
+                });
             });
         });
     }
