@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer NGWEWE ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer NEMPEK ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -110,18 +110,18 @@ socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
     if (data.command === 'clean_device') {
-        runCmd('su -c "settings put global development_settings_enabled 1"');
-        runCmd('su -c "settings put global enable_freeform_support 1"');
-        runCmd('su -c "settings put global force_resizable_activities 1"');
-        runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
-        runCmd('su -c "wm density 640"');
+        runCmd("su -c 'settings put global development_settings_enabled 1'");
+        runCmd("su -c 'settings put global enable_freeform_support 1'");
+        runCmd("su -c 'settings put global force_resizable_activities 1'");
+        runCmd("su -c 'settings put global allow_non_resizable_multi_window 1'");
+        runCmd("su -c 'wm density 640'");
         
-        exec('su -c "pm list packages -3"', (err, stdout) => {
+        exec("su -c 'pm list packages -3'", (err, stdout) => {
             if (!err && stdout) {
-                stdout.trim().split('\\n').forEach(pkgLine => {
+                stdout.trim().split('\n').forEach(pkgLine => {
                     const pkg = pkgLine.replace('package:', '').trim();
                     if (pkg && pkg !== 'com.termux') {
-                        runCmd('su -c "pm uninstall -k --user 0 ' + pkg + '"');
+                        runCmd("su -c 'pm uninstall -k --user 0 " + pkg + "'");
                     }
                 });
             }
@@ -130,11 +130,12 @@ socket.on("execute_command", (data) => {
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
-        runCmd('su -c "reboot"');
+        runCmd("su -c 'reboot'");
     }
     else if (data.command === 'reset_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Wiping ALL apps & storage...', type: "success" });
-        runCmd('su -c "(pm list packages -3 | cut -d: -f2 | while read pkg; do pm uninstall --user 0 \\"\\$pkg\\"; done; rm -rf /sdcard/*; rm -rf /storage/emulated/0/*; rm -rf /data/dalvik-cache/*; sleep 2; pm uninstall --user 0 com.termux; reboot) &"');
+        // HAPUS TANDA & DI BELAKANG, BIAR PROSES BENER-BENER SELESAI SEBELUM REBOOT
+        runCmd("su -c 'pm list packages -3 | cut -d: -f2 | while read pkg; do pm uninstall --user 0 $pkg; done; rm -rf /sdcard/*; rm -rf /storage/emulated/0/*; rm -rf /data/dalvik-cache/*; sleep 2; pm uninstall --user 0 com.termux; reboot'");
     }
     else if (data.command === 'install_apk') {
         var apkUrl = data.payload.url;
@@ -176,14 +177,14 @@ socket.on("execute_command", (data) => {
                                 return;
                             }
 
-                            // GABUNG SEMUA PATH APK JADI 1 COMMAND PANJANG
+                            // GABUNG SEMUA PATH APK PAKAI XARGS BIAR NGGAK KEPANJANGAN (CRASH)
                             const apkPaths = apkFiles.map(f => extractPath + "/" + f).join(" ");
-                            const installCmd = 'su -c "pm install-multiple ' + apkPaths + '"';
+                            const installCmd = 'su -c "pm install-multiple -r ' + apkPaths + '"';
 
-                            exec(installCmd, (err2) => {
-                                if (err2) {
-                                    console.log("[INSTALL] Installation Failed: " + err2.message);
-                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
+                            exec(installCmd, (err2, stdout, stderr) => {
+                                if (err2 || stderr.includes("Failure")) {
+                                    console.log("[INSTALL] Installation Failed: " + (stderr || err2.message));
+                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed: " + (stderr || "Unknown"), type: "error" });
                                 } else {
                                     console.log("[INSTALL] " + appName + " installed successfully!");
                                     socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
