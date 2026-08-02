@@ -179,15 +179,27 @@ socket.on("execute_command", (data) => {
             "com.android.providers.blockednumber"
         ];
         
-        // 3. LOOPING: COBA UNINSTALL, KALO GAGAL LANGSUNG DISABLE
+        // 3. LIST APPS YANG CUMA BOLEH DI-DISABLE (JANGAN DI-UNINSTALL)
+        const disableOnly = [
+            "com.google.android.gms",                  // Google Play Services
+            "com.android.inputmethod.latin",           // Android Keyboard (AOSP)
+            "com.google.android.inputmethod.latin"     // Gboard
+        ];
+        
+        // 4. LOOPING: COBA UNINSTALL, KALO GAGAL LANGSUNG DISABLE
         apps.forEach(pkg => {
             exec('su -c "pm uninstall --user 0 ' + pkg + ' 2>/dev/null || pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
         });
         
-        // 4. BERSIHKAN SHORTCUT IKLAN DI HOME SCREEN (LAUNCHER)
+        // 5. LOOPING DISABLE ONLY (Paksa disable tanpa uninstall)
+        disableOnly.forEach(pkg => {
+            exec('su -c "pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
+        });
+        
+        // 6. BERSIHKAN SHORTCUT IKLAN DI HOME SCREEN (LAUNCHER)
         exec('su -c "pm clear com.android.launcher3"', () => {});
         
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned! Bloatware uninstalled/disabled & DPI set to 600', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned! Bloatware disabled & DPI set to 600', type: "success" });
         console.log("[CMD] Successfully Cleaning Device");
     } 
     else if (data.command === 'reboot_device') {
