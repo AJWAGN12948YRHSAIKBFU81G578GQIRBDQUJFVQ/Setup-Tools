@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer 21412412 ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -110,15 +110,16 @@ socket.on("execute_command", (data) => {
     console.log("[CMD] Received: " + data.command);
     
     if (data.command === 'clean_device') {
-        // GUA UBAH KUTIP NYA JADI SATU (') SUPAYA NODE.JS GAK SILIENT ERROR
-        runCmd("su -c 'settings put global development_settings_enabled 1'");
-        runCmd("su -c 'settings put global enable_freeform_support 1'");
-        runCmd("su -c 'settings put global force_resizable_activities 1'");
-        runCmd("su -c 'settings put global allow_non_resizable_multi_window 1'");
-        runCmd("su -c 'wm density 600'");
+        runCmd('su -c "settings put global development_settings_enabled 1"');
+        runCmd('su -c "settings put global enable_freeform_support 1"');
+        runCmd('su -c "settings put global force_resizable_activities 1"');
+        runCmd('su -c "settings put global allow_non_resizable_multi_window 1"');
+        // BISA AJA INI YANG BIKIN SMALLEST WIDTH JADI 192. WM DENSITY 600 = DPI 600.
+        // KALAU LU MAU SMALLEST WIDTH (DP) NYA 600, COBA GANTI ANGKA NYA JADI 320 ATAU 240.
+        runCmd('su -c "wm density 600"');
         
-        // GABUNG UNINSTALL BLOATWARE JADI 1 COMMAND BASH (LEBIH CEPET & AMAN)
-        runCmd("su -c 'pm list packages -3 | cut -d: -f2 | grep -v com.termux | while read pkg; do pm uninstall --user 0 \"$pkg\"; done'");
+        // PERBAIKAN UTAMA: $pkg DI-ESCAPE JADI \$pkg SUPAYA NGGAK JADI STRING KOSONG ""
+        runCmd('su -c "pm list packages -3 | cut -d: -f2 | grep -v com.termux | while read pkg; do pm uninstall --user 0 \$pkg; done"');
         
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned & DPI set to 600', type: "success" });
     } 
