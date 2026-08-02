@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer PENTEL ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -37,7 +37,7 @@ rm -rf ~/tinkerbell-bridge
 
 echo -e "${GREEN}=== Installing Required Packages ===${NC}"
 pkg update -y
-pkg install nodejs python -y
+pkg install nodejs-lts python -y
 
 echo -e "${GREEN}=== Setting Up Bridge Environment ===${NC}"
 cd ~
