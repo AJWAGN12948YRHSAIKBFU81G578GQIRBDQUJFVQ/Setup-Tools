@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ANJGG ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer NGWEWE ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -38,8 +38,7 @@ rm -rf ~/tinkerbell-bridge
 
 echo -e "${GREEN}=== Installing Required Packages ===${NC}"
 pkg uninstall nodejs -y > /dev/null 2>&1
-pkg install openssl -y
-pkg install nodejs-lts unzip -y
+DEBIAN_FRONTEND=noninteractive pkg install -y openssl nodejs-lts unzip -o Dpkg::Options::="--force-confold" -o Dpkg::Options::="--force-confdef" < /dev/null
 
 echo -e "${GREEN}=== Setting Up Bridge Environment ===${NC}"
 cd ~
@@ -57,7 +56,6 @@ const fs = require("fs");
 const VPS_URL = "$VPS_URL"; 
 const LICENSE_KEY = "$LICENSE_KEY";
 
-// FIX HWID: BACA GETPROP BENER + SIMPAN KE device_id.txt
 function getProp(prop) {
     try {
         return execSync("getprop " + prop).toString().trim();
@@ -160,7 +158,7 @@ socket.on("execute_command", (data) => {
                 console.log("[INSTALL] Download complete. Processing...");
                 socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download complete. Installing...", type: "info" });
 
-                // FIX XAPK: PAKAI UNZIP BAWAAN TERMUX (NGGAK PAKE PYTHON LAGI)
+                // METHOD B: PAKAI UNZIP + PM INSTALL-MULTIPLE BUAT SPLIT APK
                 if (appName.endsWith(".xapk") || appName.endsWith(".zip")) {
                     exec("unzip -o " + downloadPath + " -d " + extractPath, (err1) => {
                         if (err1) {
@@ -178,34 +176,26 @@ socket.on("execute_command", (data) => {
                                 return;
                             }
 
-                            let installedCount = 0;
-                            let hasError = false;
+                            // GABUNG SEMUA PATH APK JADI 1 COMMAND PANJANG
+                            const apkPaths = apkFiles.map(f => extractPath + "/" + f).join(" ");
+                            const installCmd = 'su -c "pm install-multiple ' + apkPaths + '"';
 
-                            apkFiles.forEach((file) => {
-                                const fullPath = extractPath + "/" + file;
-                                exec('su -c "pm install ' + fullPath + '"', (err2) => {
-                                    installedCount++;
-                                    if (err2) {
-                                        hasError = true;
-                                        console.log("[INSTALL] Failed to install " + file + ": " + err2.message);
-                                    }
-
-                                    if (installedCount === apkFiles.length) {
-                                        if (hasError) {
-                                            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Some APKs failed to install.", type: "error" });
-                                        } else {
-                                            console.log("[INSTALL] " + appName + " installed successfully!");
-                                            socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
-                                        }
-                                        exec('rm -rf ' + extractPath + ' ' + downloadPath);
-                                    }
-                                });
+                            exec(installCmd, (err2) => {
+                                if (err2) {
+                                    console.log("[INSTALL] Installation Failed: " + err2.message);
+                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installation failed.", type: "error" });
+                                } else {
+                                    console.log("[INSTALL] " + appName + " installed successfully!");
+                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: appName + " installed successfully!", type: "success" });
+                                }
+                                exec('rm -rf ' + extractPath + ' ' + downloadPath);
                             });
                         } catch (e) {
                             socket.emit("device_log", { deviceId: DEVICE_ID, message: "Failed to read extracted files.", type: "error" });
                         }
                     });
                 } else {
+                    // KALO .apk BIASA, LANGSUNG INSTALL
                     exec('su -c "pm install ' + downloadPath + '"', (err2) => {
                         if (err2) {
                             console.log("[INSTALL] Installation Failed: " + err2.message);
