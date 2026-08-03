@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer WWW ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer 128214 ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -37,7 +37,7 @@ rm -rf ~/tinkerbell-bridge
 
 echo -e "${GREEN}=== Installing Required Packages ===${NC}"
 pkg uninstall nodejs -y > /dev/null 2>&1
-DEBIAN_FRONTEND=noninteractive pkg install -y openssl nodejs-lts unzip -o Dpkg::Options::="--force-confold" -o Dpkg::Options::="--force-confdef" < /dev/null
+DEBIAN_FRONTEND=noninteractive pkg install -y openssl nodejs-lts unzip aapt -o Dpkg::Options::="--force-confold" -o Dpkg::Options::="--force-confdef" < /dev/null
 
 echo -e "${GREEN}=== Setting Up Bridge Environment ===${NC}"
 cd ~
