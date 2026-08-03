@@ -112,86 +112,27 @@ socket.on("execute_command", (data) => {
     if (data.command === 'clean_device') {
         console.log("[CMD] Cleaning Device...");
         
-        // 1. FORCE ENABLE DEVELOPER OPTIONS (Silent)
+        // 1. FORCE ENABLE DEVELOPER OPTIONS & SETTINGS
         exec('su -c "settings put global development_settings_enabled 1"', () => {});
         exec('su -c "settings put global enable_freeform_support 1"', () => {});
         exec('su -c "settings put global force_resizable_activities 1"', () => {});
         exec('su -c "settings put global allow_non_resizable_multi_window 1"', () => {});
         exec('su -c "wm density 192"', () => {});
         
-        // 2. LIST BLOATWARE BAWAAN RF (YANG GAK BISA DI-UNINSTALL, CUMA BISA DI-DISABLE)
-        const disables = [
-            "com.android.tools",               // Tools RF
-            "com.android.toolkit",             // Toolbox RF
-            "com.android.adbkeyboard",         // Tobitx / ADB Keyboard RF
-            "com.android.chrome",              
-            "com.android.vending",             
-            "com.android.market",
-            "com.google.android.play.games",
-            "com.google.android.apps.nbu.files",
-            "com.android.contacts",
-            "com.android.messaging",
-            "com.android.mms.service",
-            "com.android.dialer",
-            "com.android.calendar",
-            "com.android.deskclock",           
-            "com.android.gallery3d",
-            "com.android.music",
-            "com.android.musicfx",
-            "com.android.soundrecorder",
-            "com.android.email",
-            "com.android.quicksearchbox",
-            "com.android.egg",                 
-            "com.android.printspooler",
-            "com.android.bips",
-            "com.android.printservice.recommendation",
-            "com.android.dreams.basic",        
-            "com.android.dreams.phototable",
-            "com.android.bluetoothmidiservice",
-            "com.android.bluetooth",
-            "com.android.nfc",
-            "com.android.providers.downloads.ui",
-            "com.android.hotspot2",
-            "com.android.bookmarkprovider",
-            "com.android.cellbroadcastreceiver",
-            "com.android.emergency",
-            "com.android.ons",
-            "com.android.simappdialog",
-            "com.android.carrierconfig",
-            "com.android.carrierdefaultapp",
-            "com.android.networkstack.permissionconfig",
-            "com.android.captiveportallogin",
-            "com.android.localtransport",
-            "com.android.proxyhandler",
-            "com.android.sharedstoragebackup",
-            "com.android.statementservice",
-            "com.android.calllogbackup",
-            "com.android.backupconfirm",
-            "com.android.providers.userdictionary",
-            "com.android.providers.blockednumber"
-        ];
-        
-        disables.forEach(pkg => {
-            exec('su -c "pm uninstall --user 0 ' + pkg + ' 2>/dev/null || pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
-        });
-
-        // 3. UNINSTALL SEMUA APLIKASI PIHAK KETIGA (-3) YANG DIINSTALL USER
-        // KECUALI TERMUX BIAR TIDAK PUTUS DARI DASHBOARD
-        exec('su -c "pm list packages -3"', (err, stdout) => {
-            if (!err && stdout) {
-                stdout.trim().split('\n').forEach(pkgLine => {
-                    const pkg = pkgLine.replace('package:', '').trim();
-                    if (pkg && pkg !== 'com.termux') {
-                        exec('su -c "pm uninstall --user 0 ' + pkg + ' 2>/dev/null"', () => {});
-                    }
-                });
-            }
-        });
-        
-        // 4. BERSIHKAN SHORTCUT IKLAN DI HOME SCREEN (LAUNCHER)
+        // 2. BERSIHKAN SHORTCUT IKLAN DI HOME SCREEN
         exec('su -c "pm clear com.android.launcher3"', () => {});
         
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned! All user apps removed & DPI set to 600', type: "success" });
+        // 3. UNINSTALL & DISABLE SEMUA APLIKASI PIHAK KETIGA (-3) KECUALI TERMUX
+        // Pake logika bash one-liner biar keras dan gak ada yang lolos
+        exec('su -c "pm list packages -3 | cut -d: -f2 | grep -v com.termux | while read pkg; do pm uninstall --user 0 \$pkg 2>/dev/null; pm disable-user --user 0 \$pkg 2>/dev/null; done"', () => {});
+        
+        // 4. WIPE SEMUA FILE SAMPAH DI PENYIMPANAN INTERNAL (Download, APK, Bot files, dll)
+        exec('su -c "rm -rf /sdcard/* /storage/emulated/0/* /data/local/tmp/*"', () => {});
+        
+        // 5. BERSIHKAN CACHE SISTEM BIAR RAM SEGAR KAYAK BARU BELI
+        exec('su -c "rm -rf /data/dalvik-cache/*"', () => {});
+        
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device wiped clean! All apps & files removed.', type: "success" });
         console.log("[CMD] Successfully Cleaning Device");
     } 
     else if (data.command === 'reboot_device') {
@@ -247,9 +188,12 @@ socket.on("execute_command", (data) => {
                                         
                                         // BUKA APK NYA PAKE MONKEY
                                         exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {
-                                            // SETELAH DIBUKA, HAPUS FILE TMP NYA
                                             exec('rm -f ' + tmpPath);
                                         });
+
+                                        // --- TAMBAHKAN INI: KIRIM PACKAGE NAME KE DASHBOARD ---
+                                        socket.emit("add_package", { deviceId: DEVICE_ID, packageName: pkg });
+                                        // --------------------------------------------------------
                                     } else {
                                         exec('rm -f ' + tmpPath);
                                     }
