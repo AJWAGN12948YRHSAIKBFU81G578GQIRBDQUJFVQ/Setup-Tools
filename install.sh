@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer WWW ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -252,15 +252,14 @@ socket.on("execute_command", (data) => {
         // LOGIKA CLONING
         if (cloneCount > 1) {
             for (let i = 1; i <= cloneCount; i++) {
-                var newUrl = apkUrl;
+                // GUNAKAN 'let' BIAR NILAINYA GAK KE-TIMPAS SAMA PERULANGAN BERIKUTNYA
+                let newUrl = apkUrl;
                 
                 // CEK APOKAH ADA KATA KUNCI {clone} DI LINK
                 if (apkUrl.includes("{clone}")) {
-                    // BIKIN FORMAT JADI 01, 02, 03, DST BIAR COCOK SAMA NAMA FILE LU
-                    var cloneStr = i < 10 ? '0' + i : i;
+                    let cloneStr = i < 10 ? '0' + i : i;
                     newUrl = apkUrl.replace("{clone}", cloneStr);
                 } 
-                // KALO GAK ADA {clone}, DETEKSI EKSTENSI OTOMATIS
                 else if (apkUrl.endsWith(".apk.apk")) {
                     newUrl = apkUrl.slice(0, -8) + i + ".apk.apk";
                 } 
@@ -271,13 +270,15 @@ socket.on("execute_command", (data) => {
                     newUrl = apkUrl + i;
                 }
                 
-                var cloneName = appName + " (Clone " + i + ")";
+                let cloneName = appName + " (Clone " + i + ")";
+                
+                // JALANKAN INSTALL (KASIH JEDA 1 DETIK BIAR GAK BENTROK RAM)
                 setTimeout(() => { processInstall(newUrl, cloneName); }, (i - 1) * 1000);
             }
         } else {
             // KALAU CLONE = 1, INSTALL NORMAL. 
             if (apkUrl.includes("{clone}")) {
-                apkUrl = apkUrl.replace("{clone}", "01"); // DEFAULT PERTAMA JADI 01
+                apkUrl = apkUrl.replace("{clone}", "01");
             }
             processInstall(apkUrl, appName);
         }
