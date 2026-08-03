@@ -112,14 +112,6 @@ socket.on("execute_command", (data) => {
     if (data.command === 'clean_device') {
         console.log("[CMD] Cleaning Device...");
         
-        // 0. WAJIB: ENABLE BALIK PACKAGE SISTEM YANG KEDISABLE DARI CODE LAMA (FIX CRASH APP INFO)
-        exec('su -c "pm enable com.android.permissioncontroller"', () => {});
-        exec('su -c "pm enable com.android.packageinstaller"', () => {});
-        exec('su -c "pm enable com.android.providers.telephony"', () => {});
-        exec('su -c "pm enable com.android.providers.calendar"', () => {});
-        exec('su -c "pm enable com.android.providers.downloads"', () => {});
-        exec('su -c "pm enable com.android.networkstack"', () => {});
-        
         // 1. FORCE ENABLE DEVELOPER OPTIONS (Silent)
         exec('su -c "settings put global development_settings_enabled 1"', () => {});
         exec('su -c "settings put global enable_freeform_support 1"', () => {});
@@ -127,8 +119,8 @@ socket.on("execute_command", (data) => {
         exec('su -c "settings put global allow_non_resizable_multi_window 1"', () => {});
         exec('su -c "wm density 192"', () => {});
         
-        // 2. LIST BLOATWARE YANG AMAN DI-UNINSTALL/DISABLE
-        const apps = [
+        // 2. LIST BLOATWARE BAWAAN RF (YANG GAK BISA DI-UNINSTALL, CUMA BISA DI-DISABLE)
+        const disables = [
             "com.android.tools",               // Tools RF
             "com.android.toolkit",             // Toolbox RF
             "com.android.adbkeyboard",         // Tobitx / ADB Keyboard RF
@@ -179,27 +171,27 @@ socket.on("execute_command", (data) => {
             "com.android.providers.blockednumber"
         ];
         
-        // 3. LIST APPS YANG CUMA BOLEH DI-DISABLE (JANGAN DI-UNINSTALL)
-        const disableOnly = [
-            "com.google.android.gms",                  // Google Play Services
-            "com.android.inputmethod.latin",           // Android Keyboard (AOSP)
-            "com.google.android.inputmethod.latin"     // Gboard
-        ];
-        
-        // 4. LOOPING: COBA UNINSTALL, KALO GAGAL LANGSUNG DISABLE
-        apps.forEach(pkg => {
+        disables.forEach(pkg => {
             exec('su -c "pm uninstall --user 0 ' + pkg + ' 2>/dev/null || pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
         });
-        
-        // 5. LOOPING DISABLE ONLY (Paksa disable tanpa uninstall)
-        disableOnly.forEach(pkg => {
-            exec('su -c "pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
+
+        // 3. UNINSTALL SEMUA APLIKASI PIHAK KETIGA (-3) YANG DIINSTALL USER
+        // KECUALI TERMUX BIAR TIDAK PUTUS DARI DASHBOARD
+        exec('su -c "pm list packages -3"', (err, stdout) => {
+            if (!err && stdout) {
+                stdout.trim().split('\n').forEach(pkgLine => {
+                    const pkg = pkgLine.replace('package:', '').trim();
+                    if (pkg && pkg !== 'com.termux') {
+                        exec('su -c "pm uninstall --user 0 ' + pkg + ' 2>/dev/null"', () => {});
+                    }
+                });
+            }
         });
         
-        // 6. BERSIHKAN SHORTCUT IKLAN DI HOME SCREEN (LAUNCHER)
+        // 4. BERSIHKAN SHORTCUT IKLAN DI HOME SCREEN (LAUNCHER)
         exec('su -c "pm clear com.android.launcher3"', () => {});
         
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned! Bloatware disabled & DPI set to 600', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device cleaned! All user apps removed & DPI set to 600', type: "success" });
         console.log("[CMD] Successfully Cleaning Device");
     } 
     else if (data.command === 'reboot_device') {
