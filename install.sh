@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer RIJAL ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -37,6 +37,7 @@ rm -rf ~/tinkerbell-bridge
 
 echo -e "${GREEN}=== Installing Required Packages ===${NC}"
 pkg uninstall nodejs -y > /dev/null 2>&1
+# TAMBAHIN aapt DI SINI BIAR AUTO INSTAL PAS AWAL RUN
 DEBIAN_FRONTEND=noninteractive pkg install -y openssl nodejs-lts unzip aapt -o Dpkg::Options::="--force-confold" -o Dpkg::Options::="--force-confdef" < /dev/null
 
 echo -e "${GREEN}=== Setting Up Bridge Environment ===${NC}"
@@ -47,14 +48,15 @@ cd tinkerbell-bridge
 npm init -y > /dev/null 2>&1
 npm install socket.io-client > /dev/null 2>&1
 
-# KITA BALIKIN KE CAT EOF ASLI LU, TAPI GUA PASTIKAN VARIABEL BASH GAK NGANGGU KODE NODE.JS
-cat << EOF > bridge.js
+# PAKAI 'EOF' (KUTIP SATU) SUPAYA BASH GAK MERUSAK KODE NODE.JS LU!
+cat << 'EOF' > bridge.js
 const { io } = require("socket.io-client");
 const { exec, execSync } = require("child_process");
 const fs = require("fs");
 
-const VPS_URL = "$VPS_URL"; 
-const LICENSE_KEY = "$LICENSE_KEY";
+// AMBIL URL & KEY DARI ARGUMENT (100% AMAN DARI BASH)
+const VPS_URL = process.argv[2]; 
+const LICENSE_KEY = process.argv[3];
 
 function getProp(prop) {
     try {
@@ -125,7 +127,6 @@ socket.on("execute_command", (data) => {
                 stdout.trim().split('\n').forEach(pkgLine => {
                     const pkg = pkgLine.replace('package:', '').trim();
                     if (pkg && pkg !== 'com.termux') {
-                        // COBA UNINSTALL, KALO GAGAL DI-DISABLE, KALO GAGAL DI-HIDE
                         exec('su -c "pm uninstall --user 0 ' + pkg + ' || pm disable-user --user 0 ' + pkg + ' || pm hide ' + pkg + '"', () => {});
                     }
                 });
@@ -149,10 +150,9 @@ socket.on("execute_command", (data) => {
         if (appName === "app.apk" || appName === "") appName = "APK";
         
         var cloneCount = parseInt(data.payload.count) || 1;
-        if (cloneCount > 10) cloneCount = 10; // MAX 10 CLONE
+        if (cloneCount > 10) cloneCount = 10;
         var isExecutor = data.payload.isExecutor || false;
         
-        // FUNCTION BUAT DOWNLOAD, INSTALL & OPEN
         const processInstall = (url, name) => {
             var uniqueId = Date.now() + Math.floor(Math.random() * 1000);
             var downloadPath = "/data/data/com.termux/files/home/app_download_" + uniqueId + ".apk";
@@ -180,28 +180,41 @@ socket.on("execute_command", (data) => {
                         console.log("[INSTALL] " + name + " installed successfully!");
                         socket.emit("device_log", { deviceId: DEVICE_ID, message: name + " installed successfully!", type: "success" });
                         
-                        // KALO INI EXECUTOR, AUTO OPEN PAKE AAPT + MONKEY
                         if (isExecutor) {
                             exec('su -c "aapt dump badging ' + tmpPath + ' | grep package"', (err3, pkgOut) => {
                                 if (!err3 && pkgOut) {
                                     const match = pkgOut.match(/name='([^']+)'/);
                                     if (match && match[1]) {
                                         const pkg = match[1];
-                                        console.log("[INSTALL] Auto opening " + pkg + "...");
+                                        console.log("[INSTALL] Auto opening (Freeform) " + pkg + "...");
                                         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Opening " + name + "...", type: "info" });
                                         
-                                        // BUKA APK NYA
-                                        exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {
-                                            exec('rm -f ' + tmpPath);
+                                        exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err4, actOut) => {
+                                            if (!err4 && actOut) {
+                                                const activity = actOut.trim();
+                                                if (activity) {
+                                                    exec('su -c "am start --windowingMode 4 -n ' + activity + '"', () => {
+                                                        exec('rm -f ' + tmpPath);
+                                                    });
+                                                } else {
+                                                    exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {
+                                                        exec('rm -f ' + tmpPath);
+                                                    });
+                                                }
+                                            } else {
+                                                exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {
+                                                    exec('rm -f ' + tmpPath);
+                                                });
+                                            }
                                         });
 
-                                        // KIRIM PACKAGE NAME KE DASHBOARD
                                         socket.emit("add_package", { deviceId: DEVICE_ID, packageName: pkg });
                                     } else {
                                         exec('rm -f ' + tmpPath);
                                     }
                                 } else {
-                                    console.log("[INSTALL] AAPT not found or failed to read package.");
+                                    console.log("[INSTALL] AAPT failed or not found. Fallback to monkey.");
+                                    exec('su -c "monkey -p ' + name + ' 1"', () => {});
                                     exec('rm -f ' + tmpPath);
                                 }
                             });
@@ -217,11 +230,9 @@ socket.on("execute_command", (data) => {
             });
         };
 
-        // LOGIKA CLONING
         if (cloneCount > 1) {
             for (let i = 1; i <= cloneCount; i++) {
                 let newUrl = apkUrl;
-                
                 if (apkUrl.includes("{clone}")) {
                     let cloneStr = i < 10 ? '0' + i : i;
                     newUrl = apkUrl.replace("{clone}", cloneStr);
@@ -237,7 +248,6 @@ socket.on("execute_command", (data) => {
                 }
                 
                 let cloneName = appName + " (Clone " + i + ")";
-                // KASIH JEDA 2 DETIK BIAR INSTALL NYA GAK BENTROK
                 setTimeout(() => { processInstall(newUrl, cloneName); }, (i - 1) * 2000);
             }
         } else {
@@ -256,4 +266,4 @@ socket.on("disconnect", () => { console.log("Disconnected. Reconnecting..."); })
 EOF
 
 echo -e "${GREEN}=== Starting Tinkerbell Bridge ===${NC}"
-node bridge.js
+node bridge.js "$VPS_URL" "$LICENSE_KEY"
