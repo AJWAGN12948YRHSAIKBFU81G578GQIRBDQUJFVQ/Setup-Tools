@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer TUROK ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -182,7 +182,7 @@ socket.on("execute_command", (data) => {
                         
                         // KALO INI EXECUTOR, AUTO OPEN PAKE AAPT + MONKEY
                         if (isExecutor) {
-                            exec('su -c "aapt dump badging ' + tmpPath + ' | grep package | head -1"', (err3, pkgOut) => {
+                            exec('su -c "aapt dump badging ' + tmpPath + ' | grep package"', (err3, pkgOut) => {
                                 if (!err3 && pkgOut) {
                                     const match = pkgOut.match(/name='([^']+)'/);
                                     if (match && match[1]) {
@@ -190,18 +190,18 @@ socket.on("execute_command", (data) => {
                                         console.log("[INSTALL] Auto opening " + pkg + "...");
                                         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Opening " + name + "...", type: "info" });
                                         
-                                        // BUKA APK NYA PAKE MONKEY
+                                        // BUKA APK NYA
                                         exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {
                                             exec('rm -f ' + tmpPath);
                                         });
 
-                                        // --- TAMBAHKAN INI: KIRIM PACKAGE NAME KE DASHBOARD ---
+                                        // KIRIM PACKAGE NAME KE DASHBOARD
                                         socket.emit("add_package", { deviceId: DEVICE_ID, packageName: pkg });
-                                        // --------------------------------------------------------
                                     } else {
                                         exec('rm -f ' + tmpPath);
                                     }
                                 } else {
+                                    console.log("[INSTALL] AAPT not found or failed to read package.");
                                     exec('rm -f ' + tmpPath);
                                 }
                             });
