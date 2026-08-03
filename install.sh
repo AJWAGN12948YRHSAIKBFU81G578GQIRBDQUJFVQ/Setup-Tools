@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer XXX ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer TUROK ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -112,24 +112,28 @@ socket.on("execute_command", (data) => {
     if (data.command === 'clean_device') {
         console.log("[CMD] Cleaning Device...");
         
-        // 1. FORCE ENABLE DEVELOPER OPTIONS & SETTINGS
         exec('su -c "settings put global development_settings_enabled 1"', () => {});
         exec('su -c "settings put global enable_freeform_support 1"', () => {});
         exec('su -c "settings put global force_resizable_activities 1"', () => {});
         exec('su -c "settings put global allow_non_resizable_multi_window 1"', () => {});
         exec('su -c "wm density 192"', () => {});
-        
-        // 2. BERSIHKAN SHORTCUT IKLAN DI HOME SCREEN
         exec('su -c "pm clear com.android.launcher3"', () => {});
         
-        // 3. UNINSTALL & DISABLE SEMUA APLIKASI PIHAK KETIGA (-3) KECUALI TERMUX
-        // Pake logika bash one-liner biar keras dan gak ada yang lolos
-        exec('su -c "pm list packages -3 | cut -d: -f2 | grep -v com.termux | while read pkg; do pm uninstall --user 0 \$pkg 2>/dev/null; pm disable-user --user 0 \$pkg 2>/dev/null; done"', () => {});
+        // UNINSTALL SEMUA APP PIHAK KETIGA KECUALI TERMUX (PAKE NODEJS LOOP)
+        exec('su -c "pm list packages -3"', (err, stdout) => {
+            if (!err && stdout) {
+                stdout.trim().split('\n').forEach(pkgLine => {
+                    const pkg = pkgLine.replace('package:', '').trim();
+                    if (pkg && pkg !== 'com.termux') {
+                        // COBA UNINSTALL, KALO GAGAL DI-DISABLE, KALO GAGAL DI-HIDE
+                        exec('su -c "pm uninstall --user 0 ' + pkg + ' || pm disable-user --user 0 ' + pkg + ' || pm hide ' + pkg + '"', () => {});
+                    }
+                });
+            }
+        });
         
-        // 4. WIPE SEMUA FILE SAMPAH DI PENYIMPANAN INTERNAL (Download, APK, Bot files, dll)
+        // WIPE FILE SAMPAH
         exec('su -c "rm -rf /sdcard/* /storage/emulated/0/* /data/local/tmp/*"', () => {});
-        
-        // 5. BERSIHKAN CACHE SISTEM BIAR RAM SEGAR KAYAK BARU BELI
         exec('su -c "rm -rf /data/dalvik-cache/*"', () => {});
         
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device wiped clean! All apps & files removed.', type: "success" });
