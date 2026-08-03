@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer 128214 ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer XXX ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -205,8 +205,9 @@ socket.on("execute_command", (data) => {
         
         var cloneCount = parseInt(data.payload.count) || 1;
         if (cloneCount > 10) cloneCount = 10; // MAX 10 CLONE
+        var isExecutor = data.payload.isExecutor || false;
         
-        // FUNCTION BUAT DOWNLOAD & INSTALL 1 FILE
+        // FUNCTION BUAT DOWNLOAD, INSTALL & OPEN
         const processInstall = (url, name) => {
             var uniqueId = Date.now() + Math.floor(Math.random() * 1000);
             var downloadPath = "/data/data/com.termux/files/home/app_download_" + uniqueId + ".apk";
@@ -224,7 +225,7 @@ socket.on("execute_command", (data) => {
                 }
                 
                 console.log("[INSTALL] Installing " + name + "...");
-                var installCmd = 'su -c "cp ' + downloadPath + ' ' + tmpPath + ' && pm install -r ' + tmpPath + ' && rm -f ' + tmpPath + '"';
+                var installCmd = 'su -c "cp ' + downloadPath + ' ' + tmpPath + ' && pm install -r ' + tmpPath + '"';
                 
                 exec(installCmd, (err2, stdout, stderr) => {
                     const output = (stdout || "") + (stderr || "");
@@ -233,9 +234,36 @@ socket.on("execute_command", (data) => {
                     if (output.includes("Success")) {
                         console.log("[INSTALL] " + name + " installed successfully!");
                         socket.emit("device_log", { deviceId: DEVICE_ID, message: name + " installed successfully!", type: "success" });
+                        
+                        // KALO INI EXECUTOR, AUTO OPEN PAKE AAPT + MONKEY
+                        if (isExecutor) {
+                            exec('su -c "aapt dump badging ' + tmpPath + ' | grep package | head -1"', (err3, pkgOut) => {
+                                if (!err3 && pkgOut) {
+                                    const match = pkgOut.match(/name='([^']+)'/);
+                                    if (match && match[1]) {
+                                        const pkg = match[1];
+                                        console.log("[INSTALL] Auto opening " + pkg + "...");
+                                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Opening " + name + "...", type: "info" });
+                                        
+                                        // BUKA APK NYA PAKE MONKEY
+                                        exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {
+                                            // SETELAH DIBUKA, HAPUS FILE TMP NYA
+                                            exec('rm -f ' + tmpPath);
+                                        });
+                                    } else {
+                                        exec('rm -f ' + tmpPath);
+                                    }
+                                } else {
+                                    exec('rm -f ' + tmpPath);
+                                }
+                            });
+                        } else {
+                            exec('rm -f ' + tmpPath);
+                        }
                     } else {
                         console.log("[INSTALL] Installation Failed: " + output);
                         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed for " + name + ": " + output.substring(0, 100), type: "error" });
+                        exec('rm -f ' + tmpPath);
                     }
                 });
             });
@@ -244,10 +272,8 @@ socket.on("execute_command", (data) => {
         // LOGIKA CLONING
         if (cloneCount > 1) {
             for (let i = 1; i <= cloneCount; i++) {
-                // GUNAKAN 'let' BIAR NILAINYA GAK KE-TIMPAS SAMA PERULANGAN BERIKUTNYA
                 let newUrl = apkUrl;
                 
-                // CEK APOKAH ADA KATA KUNCI {clone} DI LINK
                 if (apkUrl.includes("{clone}")) {
                     let cloneStr = i < 10 ? '0' + i : i;
                     newUrl = apkUrl.replace("{clone}", cloneStr);
@@ -263,12 +289,10 @@ socket.on("execute_command", (data) => {
                 }
                 
                 let cloneName = appName + " (Clone " + i + ")";
-                
-                // JALANKAN INSTALL (KASIH JEDA 1 DETIK BIAR GAK BENTROK RAM)
-                setTimeout(() => { processInstall(newUrl, cloneName); }, (i - 1) * 1000);
+                // KASIH JEDA 2 DETIK BIAR INSTALL NYA GAK BENTROK
+                setTimeout(() => { processInstall(newUrl, cloneName); }, (i - 1) * 2000);
             }
         } else {
-            // KALAU CLONE = 1, INSTALL NORMAL. 
             if (apkUrl.includes("{clone}")) {
                 apkUrl = apkUrl.replace("{clone}", "01");
             }
