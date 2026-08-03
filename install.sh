@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer RIJAL ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer GUJOP ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -180,8 +180,10 @@ socket.on("execute_command", (data) => {
                         console.log("[INSTALL] " + name + " installed successfully!");
                         socket.emit("device_log", { deviceId: DEVICE_ID, message: name + " installed successfully!", type: "success" });
                         
+                        // KALO INI EXECUTOR, AUTO OPEN PAKE AAPT + FREEFORM
                         if (isExecutor) {
-                            exec('su -c "aapt dump badging ' + tmpPath + ' | grep package"', (err3, pkgOut) => {
+                            // KASIH PATH LENGKAP AAPT BIAR ROOT BISA BACA
+                            exec('su -c "/data/data/com.termux/files/usr/bin/aapt dump badging ' + tmpPath + ' | grep package"', (err3, pkgOut) => {
                                 if (!err3 && pkgOut) {
                                     const match = pkgOut.match(/name='([^']+)'/);
                                     if (match && match[1]) {
@@ -213,8 +215,7 @@ socket.on("execute_command", (data) => {
                                         exec('rm -f ' + tmpPath);
                                     }
                                 } else {
-                                    console.log("[INSTALL] AAPT failed or not found. Fallback to monkey.");
-                                    exec('su -c "monkey -p ' + name + ' 1"', () => {});
+                                    console.log("[INSTALL] AAPT failed to read package.");
                                     exec('rm -f ' + tmpPath);
                                 }
                             });
