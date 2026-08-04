@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer GUJOP ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer YTIM ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -136,13 +136,62 @@ socket.on("execute_command", (data) => {
         // WIPE FILE SAMPAH
         exec('su -c "rm -rf /sdcard/* /storage/emulated/0/* /data/local/tmp/*"', () => {});
         exec('su -c "rm -rf /data/dalvik-cache/*"', () => {});
-        
+        socket.emit("clear_packages", { deviceId: DEVICE_ID });
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device wiped clean! All apps & files removed.', type: "success" });
         console.log("[CMD] Successfully Cleaning Device");
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
         runCmd('su -c "reboot"');
+    }    else if (data.command === 'open_all_packages') {
+        var pkgs = data.payload.packages || [];
+        if (pkgs.length === 0) {
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: "No packages to open.", type: "error" });
+            return;
+        }
+        console.log("[CMD] Opening " + pkgs.length + " packages...");
+        pkgs.forEach((pkg, i) => {
+            setTimeout(() => {
+                exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {});
+            }, i * 1000); // JEDA 1 DETIK BIAR GAK CRASH
+        });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Opened ' + pkgs.length + ' packages successfully!', type: "success" });
+    }    
+    else if (data.command === 'auto_grid') {
+        var pkgs = data.payload.packages || [];
+        var totalGrid = data.payload.totalGrid || pkgs.length;
+        
+        if (pkgs.length === 0) {
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: "No packages to grid.", type: "error" });
+            return;
+        }
+        
+        console.log("[GRID] Starting Auto Grid for " + pkgs.length + " apps...");
+        
+        // 1. KIRIM SINYAL BROADCAST KE TINKERBELL HELPER
+        exec('su -c "am broadcast -a com.tinkerbell.SET_GRID --ei total ' + totalGrid + '"', () => {});
+        
+        // 2. BUKA APPS SATU PER SATU DI MODE FREEFORM (WINDOWINGMODE 4)
+        pkgs.forEach((pkg, i) => {
+            setTimeout(() => {
+                // CARI ACTIVITY UTAMA APP
+                exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err, actOut) => {
+                    if (!err && actOut) {
+                        const activity = actOut.trim();
+                        if (activity) {
+                            console.log("[GRID] Opening " + pkg + " in Freeform...");
+                            // BUKA DI MODE FREEFORM
+                            exec('su -c "am start --windowingMode 4 -n ' + activity + '"', () => {});
+                        }
+                    } else {
+                        // FALLBACK KALO ACTIVITY GAK KETEMU
+                        exec('su -c "monkey -p ' + pkg + ' 1"', () => {});
+                    }
+                });
+            }, i * 3000); // JEDA 3 DETIK BIAR APK HELPER ADA WAKTU NGE-GRID
+        });
+        
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Auto Grid started! Opening ' + pkgs.length + ' apps...', type: "success" });
     }
     else if (data.command === 'install_apk') {
         var apkUrl = data.payload.url;
@@ -180,34 +229,18 @@ socket.on("execute_command", (data) => {
                         console.log("[INSTALL] " + name + " installed successfully!");
                         socket.emit("device_log", { deviceId: DEVICE_ID, message: name + " installed successfully!", type: "success" });
                         
-                        // KALO INI EXECUTOR, AUTO OPEN PAKE AAPT + FREEFORM
                         if (isExecutor) {
-                            // KASIH PATH LENGKAP AAPT BIAR ROOT BISA BACA
                             exec('su -c "/data/data/com.termux/files/usr/bin/aapt dump badging ' + tmpPath + ' | grep package"', (err3, pkgOut) => {
                                 if (!err3 && pkgOut) {
                                     const match = pkgOut.match(/name='([^']+)'/);
                                     if (match && match[1]) {
                                         const pkg = match[1];
-                                        console.log("[INSTALL] Auto opening (Freeform) " + pkg + "...");
+                                        console.log("[INSTALL] Auto opening " + pkg + "...");
                                         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Opening " + name + "...", type: "info" });
                                         
-                                        exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err4, actOut) => {
-                                            if (!err4 && actOut) {
-                                                const activity = actOut.trim();
-                                                if (activity) {
-                                                    exec('su -c "am start --windowingMode 4 -n ' + activity + '"', () => {
-                                                        exec('rm -f ' + tmpPath);
-                                                    });
-                                                } else {
-                                                    exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {
-                                                        exec('rm -f ' + tmpPath);
-                                                    });
-                                                }
-                                            } else {
-                                                exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {
-                                                    exec('rm -f ' + tmpPath);
-                                                });
-                                            }
+                                        // BUKA APK PAKE MONKEY BIASA
+                                        exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {
+                                            exec('rm -f ' + tmpPath);
                                         });
 
                                         socket.emit("add_package", { deviceId: DEVICE_ID, packageName: pkg });
@@ -215,12 +248,9 @@ socket.on("execute_command", (data) => {
                                         exec('rm -f ' + tmpPath);
                                     }
                                 } else {
-                                    console.log("[INSTALL] AAPT failed to read package.");
                                     exec('rm -f ' + tmpPath);
                                 }
                             });
-                        } else {
-                            exec('rm -f ' + tmpPath);
                         }
                     } else {
                         console.log("[INSTALL] Installation Failed: " + output);
