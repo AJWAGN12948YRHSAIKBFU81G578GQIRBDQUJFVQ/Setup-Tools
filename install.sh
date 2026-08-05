@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== VEE ===${NC}"
+    echo -e "${RED}=== 1111 ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -251,23 +251,53 @@ socket.on("execute_command", (data) => {
                                 }
                             }
                             
-                            if (foundTaskId && foundTaskId !== "0") {
-                                var taskId = foundTaskId;
-                                console.log("[GRID] Found Task ID: " + taskId + ". Resizing to " + JSON.stringify(bounds) + "...");
-                                
-                                var resizeCmd = 'su -c "am task resize ' + taskId + ' ' + 
-                                                bounds.l + ' ' + bounds.t + ' ' + 
-                                                bounds.r + ' ' + bounds.b + '"';
-                                
-                                exec(resizeCmd, (rErr, rOut, rStderr) => {
-                                    var result = (rOut || "") + (rStderr || "");
-                                    if (result.includes("not allowed") || result.includes("Error")) {
-                                        console.log("[GRID] ✗ Resize failed: " + result.trim());
-                                        exec('su -c "cmd activity resize ' + taskId + ' ' + bounds.l + ' ' + bounds.t + ' ' + bounds.r + ' ' + bounds.b + '"', () => {});
-                                    } else {
-                                        console.log("[GRID] ✓ " + pkg + " successfully gridded!");
+                            // Cari StackId juga buat bypass resizeTask not allowed
+                            let foundStackId = null;
+                            for (let line of lines) {
+                                if (line.includes('TaskRecord{') && line.includes(pkg)) {
+                                    let stackMatch = line.match(/StackId=(\d+)/);
+                                    if (stackMatch && stackMatch[1]) {
+                                        foundStackId = stackMatch[1];
                                     }
-                                });
+                                    break;
+                                }
+                            }
+                            
+                            if (foundTaskId && foundTaskId !== "0") {
+                                console.log("[GRID] Found Task ID: " + foundTaskId + ", Stack ID: " + foundStackId);
+                                
+                                // 1. Coba am stack resize (Bypass check resizeable)
+                                if (foundStackId) {
+                                    var stackCmd = 'su -c "am stack resize ' + foundStackId + ' ' + 
+                                                    bounds.l + ' ' + bounds.t + ' ' + 
+                                                    bounds.r + ' ' + bounds.b + '"';
+                                    
+                                    exec(stackCmd, (sErr, sOut, sStderr) => {
+                                        var sResult = (sOut || "") + (sStderr || "");
+                                        if (sResult.includes("Error") || sResult.includes("not allowed")) {
+                                            console.log("[GRID] Stack resize failed, trying am task resize...");
+                                            
+                                            // FALLBACK: am task resize
+                                            var resizeCmd = 'su -c "am task resize ' + foundTaskId + ' ' + 
+                                                            bounds.l + ' ' + bounds.t + ' ' + 
+                                                            bounds.r + ' ' + bounds.b + '"';
+                                            exec(resizeCmd, () => {
+                                                console.log("[GRID] ✓ " + pkg + " gridded via task resize!");
+                                            });
+                                        } else {
+                                            console.log("[GRID] ✓ " + pkg + " successfully gridded via stack resize!");
+                                        }
+                                    });
+                                } else {
+                                    // Kalau gak ada StackId, langsung am task resize
+                                    var resizeCmd = 'su -c "am task resize ' + foundTaskId + ' ' + 
+                                                    bounds.l + ' ' + bounds.t + ' ' + 
+                                                    bounds.r + ' ' + bounds.b + '"';
+                                    
+                                    exec(resizeCmd, (rErr, rOut, rStderr) => {
+                                        console.log("[GRID] ✓ " + pkg + " successfully gridded via task resize!");
+                                    });
+                                }
                             } else {
                                 console.log("[GRID] Task ID still not found for " + pkg);
                             }
