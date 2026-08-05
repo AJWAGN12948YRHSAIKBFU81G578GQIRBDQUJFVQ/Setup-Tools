@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer REMI ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer AWIKGWOKG ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -93,7 +93,15 @@ const socket = io(VPS_URL, {
 socket.on("connect", () => {
     console.log("[✓] Connected to Dashboard!");
     socket.emit("device_connect", { ip: "Cloud Phone", maxPackages: 10 });
+    syncPackages(); // PANGGIL SAAT BARU CONNECT
 });
+
+// TAMBAHKAN BLOK INI (Auto-sync tiap 15 detik)
+setInterval(() => {
+    if (socket.connected) {
+        syncPackages();
+    }
+}, 15000);
 
 socket.on("connect_error", (err) => {
     console.log("[!] Connection Failed: " + err.message);
@@ -105,6 +113,18 @@ socket.on("connect_error", (err) => {
 const runCmd = (cmd) => {
     exec(cmd, (error, stdout, stderr) => {
         if (error) console.log("Cmd error: " + error.message);
+    });
+};
+
+// FUNGSI SMART DETECT: Scan package asli di HP, filter sampah, kirim ke backend
+const syncPackages = () => {
+    exec('su -c "pm list packages -3"', (err, stdout) => {
+        if (!err && stdout) {
+            let pkgs = stdout.trim().split('\n').map(line => line.replace('package:', '').trim());
+            // FILTER OUT TERMUX & TINKERBELL HELPER BIAR DASHBOARD CLEAN
+            pkgs = pkgs.filter(p => p && p !== 'com.termux' && p !== 'com.tinkerbell.helper');
+            socket.emit("sync_packages", { deviceId: DEVICE_ID, packages: pkgs });
+        }
     });
 };
 
@@ -136,14 +156,19 @@ socket.on("execute_command", (data) => {
         // WIPE FILE SAMPAH
         exec('su -c "rm -rf /sdcard/* /storage/emulated/0/* /data/local/tmp/*"', () => {});
         exec('su -c "rm -rf /data/dalvik-cache/*"', () => {});
-        socket.emit("clear_packages", { deviceId: DEVICE_ID });
+        syncPackages(); // LANGSUNG SYNC SAAT SELESAI CLEAN
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device wiped clean! All apps & files removed.', type: "success" });
         console.log("[CMD] Successfully Cleaning Device");
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
         runCmd('su -c "reboot"');
-    }    else if (data.command === 'open_all_packages') {
+    }        
+    else if (data.command === 'sync_packages') {
+        console.log("[CMD] Manual package sync requested...");
+        syncPackages();
+    }
+    else if (data.command === 'open_all_packages') {
         var pkgs = data.payload.packages || [];
         if (pkgs.length === 0) {
             socket.emit("device_log", { deviceId: DEVICE_ID, message: "No packages to open.", type: "error" });
@@ -303,7 +328,7 @@ socket.on("execute_command", (data) => {
                                             exec('rm -f ' + tmpPath);
                                         });
 
-                                        socket.emit("add_package", { deviceId: DEVICE_ID, packageName: pkg });
+                                        syncPackages(); // LANGSUNG SYNC SAAT SELESAI INSTALL
                                     } else {
                                         exec('rm -f ' + tmpPath);
                                     }
