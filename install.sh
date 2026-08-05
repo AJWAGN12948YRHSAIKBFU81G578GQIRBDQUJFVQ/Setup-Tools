@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== xxxr ===${NC}"
+    echo -e "${RED}=== VEE ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -231,13 +231,28 @@ socket.on("execute_command", (data) => {
                     }
                     
                     setTimeout(() => {
-                        // PAKE BASH PARSER: AMBIL 15 BARIS SEBELUM PACKAGE NAME, CARI Task{... #123
-                        var getTaskCmd = 'su -c "dumpsys activity activities | grep -B 15 ' + pkg + ' | grep -oE \'#[0-9]+\' | head -n 1 | cut -d# -f2"';
-                        
-                        exec(getTaskCmd, (dumpErr, dumpOut) => {
-                            var taskId = dumpOut ? dumpOut.trim() : "";
+                        exec('su -c "dumpsys activity activities"', (dumpErr, dumpOut) => {
+                            if (dumpErr || !dumpOut) {
+                                console.log("[GRID] dumpsys failed.");
+                                return;
+                            }
                             
-                            if (taskId && !isNaN(taskId)) {
+                            const lines = dumpOut.split('\n');
+                            let foundTaskId = null;
+                            
+                            for (let line of lines) {
+                                // Cari baris kayak: * TaskRecord{3c1718a #413 A=com.roblox.clienu U=0 ...}
+                                if (line.includes('TaskRecord{') && line.includes(pkg)) {
+                                    let match = line.match(/#(\d+)/);
+                                    if (match && match[1]) {
+                                        foundTaskId = match[1];
+                                        break; // Langsung break krn itu task paling atas
+                                    }
+                                }
+                            }
+                            
+                            if (foundTaskId && foundTaskId !== "0") {
+                                var taskId = foundTaskId;
                                 console.log("[GRID] Found Task ID: " + taskId + ". Resizing to " + JSON.stringify(bounds) + "...");
                                 
                                 var resizeCmd = 'su -c "am task resize ' + taskId + ' ' + 
