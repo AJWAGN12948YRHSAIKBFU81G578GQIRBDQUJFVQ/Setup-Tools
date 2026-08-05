@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== askfoagwoajgawo ===${NC}"
+    echo -e "${RED}=== 77777 ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -218,6 +218,11 @@ socket.on("execute_command", (data) => {
             exec('su -c "am force-stop ' + pkg + '"', () => {
                 exec('su -c "rm -rf /data/data/' + pkg + '/cache/* /data/data/' + pkg + '/code_cache/*"', () => {
                     
+                    // 1. INJECT GLOBAL SETTINGS BUAT BYPASS LOCK ORIENTATION (TANPA MOD APK)
+                    exec('su -c "settings put global force_resizable_activities 1"', () => {});
+                    exec('su -c "settings put global allow_non_resizable_multi_window 1"', () => {});
+                    exec('su -c "settings put global always_finish_activities 0"', () => {});
+                    
                     exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err, actOut) => {
                         var activity = actOut ? actOut.trim() : "";
                         
@@ -229,15 +234,16 @@ socket.on("execute_command", (data) => {
                         var bounds = gridSlots[index];
                         console.log("[GRID] Opening " + pkg + " in Freeform Mode...");
                         
+                        // 2. BUKA DI MODE FREEFORM
                         exec('su -c "am start --windowingMode 4 -n ' + activity + '"', (launchErr) => {
                             if (launchErr) {
                                 console.log("[GRID] Launch failed: " + launchErr.message);
                                 return;
                             }
                             
-                            // SMART POLLING: Tunggu sampai app bener-bener fully loaded
+                            // 3. SMART POLLING: Tunggu app fully loaded
                             var checkLoaded = function(retryCount) {
-                                if (retryCount > 30) { // Timeout 30 detik
+                                if (retryCount > 30) {
                                     console.log("[GRID] Timeout waiting for " + pkg + " to load.");
                                     return;
                                 }
@@ -246,7 +252,6 @@ socket.on("execute_command", (data) => {
                                     if (dumpOut && dumpOut.includes(pkg)) {
                                         console.log("[GRID] " + pkg + " is fully loaded! Applying grid bounds...");
                                         
-                                        // Ambil Task ID & Stack ID
                                         exec('su -c "dumpsys activity activities"', (dErr, dOut) => {
                                             const lines = dOut.split('\n');
                                             let foundTaskId = null;
@@ -265,7 +270,7 @@ socket.on("execute_command", (data) => {
                                             if (foundTaskId && foundTaskId !== "0") {
                                                 console.log("[GRID] Found Task ID: " + foundTaskId + ", Stack ID: " + foundStackId);
                                                 
-                                                // RESIZE COMMAND GABUNGAN
+                                                // 4. RESIZE PAKAI STACK & TASK LANGSUNG
                                                 var resizeCmd = 'su -c "am stack resize ' + foundStackId + ' ' + 
                                                                 bounds.l + ' ' + bounds.t + ' ' + 
                                                                 bounds.r + ' ' + bounds.b + ' && am task resize ' + foundTaskId + ' ' + 
@@ -273,7 +278,7 @@ socket.on("execute_command", (data) => {
                                                                 bounds.r + ' ' + bounds.b + '"';
                                                 
                                                 exec(resizeCmd, () => {
-                                                    // LOCK ULANG SETELAH 1 DETIK
+                                                    // 5. LOCK ULANG SETELAH 1 DETIK
                                                     setTimeout(() => {
                                                         exec('su -c "am task resize ' + foundTaskId + ' ' + 
                                                             bounds.l + ' ' + bounds.t + ' ' + 
@@ -285,13 +290,11 @@ socket.on("execute_command", (data) => {
                                             }
                                         });
                                     } else {
-                                        // Belom loaded, cek lagi 1 detik lagi
                                         setTimeout(() => checkLoaded(retryCount + 1), 1000);
                                     }
                                 });
                             };
                             
-                            // Mulai polling setelah 2 detik jeda awal
                             setTimeout(() => checkLoaded(0), 2000);
                         });
                     });
