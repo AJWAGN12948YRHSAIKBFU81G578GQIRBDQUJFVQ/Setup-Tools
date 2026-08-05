@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== ler ===${NC}"
+    echo -e "${RED}=== HMSaller ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -105,12 +105,6 @@ socket.on("connect", () => {
     socket.emit("device_connect", { ip: "Cloud Phone", maxPackages: 10 });
     syncPackages();
 });
-
-setInterval(() => {
-    if (socket.connected) {
-        syncPackages();
-    }
-}, 15000);
 
 const runCmd = (cmd) => {
     exec(cmd, (error, stdout, stderr) => {
@@ -229,17 +223,36 @@ socket.on("execute_command", (data) => {
                         return;
                     }
                     
+                    // JEDA 4 DETIK BIAR ACTIVITY BENER-BENER KE-DAFTAR DI SISTEM
                     setTimeout(() => {
-                        exec('su -c "dumpsys activity activities | grep -B 2 ' + pkg + ' | grep taskId"', (dumpErr, dumpOut) => {
+                        exec('su -c "dumpsys activity activities"', (dumpErr, dumpOut) => {
                             if (dumpErr || !dumpOut) {
-                                console.log("[GRID] Task ID not found for " + pkg);
+                                console.log("[GRID] dumpsys failed.");
                                 return;
                             }
                             
-                            var match = dumpOut.match(/taskId=(\d+)/);
-                            if (match && match[1]) {
-                                var taskId = match[1];
-                                console.log("[GRID] Found Task ID: " + taskId + ". Resizing...");
+                            // PARSER NODE.JS BIKINAN GUA (100% AKURAT DI ANDROID 10)
+                            const lines = dumpOut.split('\n');
+                            let currentTaskId = null;
+                            let foundTaskId = null;
+                            
+                            for (let line of lines) {
+                                // Cari baris kayak: * Task{abc123 #45 type=standard ...}
+                                let taskMatch = line.match(/Task\{[a-f0-9]+ #(\d+)/);
+                                if (taskMatch) {
+                                    currentTaskId = taskMatch[1];
+                                }
+                                
+                                // Kalau baris ini nampung nama package kita, ambil task ID-nya
+                                if (currentTaskId && line.includes(pkg)) {
+                                    foundTaskId = currentTaskId;
+                                    break; // Langsung break biar dapet yang paling atas (terbaru)
+                                }
+                            }
+                            
+                            if (foundTaskId) {
+                                var taskId = foundTaskId;
+                                console.log("[GRID] Found Task ID: " + taskId + ". Resizing to " + JSON.stringify(bounds) + "...");
                                 
                                 var resizeCmd = 'su -c "am task resize ' + taskId + ' ' + 
                                                 bounds.l + ' ' + bounds.t + ' ' + 
@@ -254,15 +267,17 @@ socket.on("execute_command", (data) => {
                                         console.log("[GRID] ✓ " + pkg + " successfully gridded!");
                                     }
                                 });
+                            } else {
+                                console.log("[GRID] Task ID not found for " + pkg + " in dumpsys.");
                             }
                         });
-                    }, 3000);
+                    }, 4000); // Naikin jadi 4 detik biar lebih safe
                 });
             });
         };
         
         pkgs.forEach((pkg, i) => {
-            setTimeout(() => processApp(pkg, i), i * 4000);
+            setTimeout(() => processApp(pkg, i), i * 5000); // Jeda 5 detik per app
         });
         
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Auto Grid started! Opening ' + pkgs.length + ' apps in Freeform Mode...', type: "success" });
