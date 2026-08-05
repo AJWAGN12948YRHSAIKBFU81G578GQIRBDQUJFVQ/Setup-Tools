@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== LLLLLKKXXS ===${NC}"
+    echo -e "${RED}=== askfoagwoajgawo ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -197,8 +197,9 @@ socket.on("execute_command", (data) => {
         var rows = Math.ceil(pkgs.length / cols);
         if (rows > 5) rows = 5;
         
-        var slotW = Math.floor(1280 / cols);
-        var slotH = Math.floor(720 / rows);
+        // FIX: Paksa rasio landscape (640x360 buat 2x2)
+        var slotW = Math.floor(1280 / cols);  // 640
+        var slotH = Math.floor(720 / rows);   // 360 (kalau 2 rows), 240 (kalau 3 rows), dll
         
         var gridSlots = [];
         for (var r = 0; r < rows; r++) {
@@ -213,12 +214,10 @@ socket.on("execute_command", (data) => {
         }
         
         var processApp = function(pkg, index) {
-            // 1. FORCE STOP & CLEAR CACHE DULU BIAR FRESH LAUNCH
             console.log("[GRID] Force stopping & clearing cache for " + pkg + "...");
             exec('su -c "am force-stop ' + pkg + '"', () => {
                 exec('su -c "rm -rf /data/data/' + pkg + '/cache/* /data/data/' + pkg + '/code_cache/*"', () => {
                     
-                    // 2. CARI ACTIVITY UTAMA
                     exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err, actOut) => {
                         var activity = actOut ? actOut.trim() : "";
                         
@@ -230,56 +229,70 @@ socket.on("execute_command", (data) => {
                         var bounds = gridSlots[index];
                         console.log("[GRID] Opening " + pkg + " in Freeform Mode...");
                         
-                        // 3. BUKA DI MODE FREEFORM
                         exec('su -c "am start --windowingMode 4 -n ' + activity + '"', (launchErr) => {
                             if (launchErr) {
                                 console.log("[GRID] Launch failed: " + launchErr.message);
                                 return;
                             }
                             
-                            // 4. JEDA 4 DETIK BIAR ACTIVITY BENER-BENER KE-DAFTAR DI SISTEM
-                            setTimeout(() => {
-                                exec('su -c "dumpsys activity activities"', (dumpErr, dumpOut) => {
-                                    if (dumpErr || !dumpOut) return;
-                                    
-                                    const lines = dumpOut.split('\n');
-                                    let foundTaskId = null;
-                                    let foundStackId = null;
-                                    
-                                    for (let line of lines) {
-                                        if (line.includes('TaskRecord{') && line.includes(pkg)) {
-                                            let taskMatch = line.match(/#(\d+)/);
-                                            let stackMatch = line.match(/StackId=(\d+)/);
-                                            if (taskMatch && taskMatch[1]) foundTaskId = taskMatch[1];
-                                            if (stackMatch && stackMatch[1]) foundStackId = stackMatch[1];
-                                            break;
-                                        }
-                                    }
-                                    
-                                    if (foundTaskId && foundTaskId !== "0") {
-                                        console.log("[GRID] Found Task ID: " + foundTaskId + ", Stack ID: " + foundStackId);
+                            // SMART POLLING: Tunggu sampai app bener-bener fully loaded
+                            var checkLoaded = function(retryCount) {
+                                if (retryCount > 30) { // Timeout 30 detik
+                                    console.log("[GRID] Timeout waiting for " + pkg + " to load.");
+                                    return;
+                                }
+                                
+                                exec('su -c "dumpsys activity activities | grep mResumedActivity"', (dumpErr, dumpOut) => {
+                                    if (dumpOut && dumpOut.includes(pkg)) {
+                                        console.log("[GRID] " + pkg + " is fully loaded! Applying grid bounds...");
                                         
-                                        var resizeCmd = 'su -c "am stack resize ' + foundStackId + ' ' + 
-                                                        bounds.l + ' ' + bounds.t + ' ' + 
-                                                        bounds.r + ' ' + bounds.b + ' && am task resize ' + foundTaskId + ' ' + 
-                                                        bounds.l + ' ' + bounds.t + ' ' + 
-                                                        bounds.r + ' ' + bounds.b + '"';
-                                        
-                                        exec(resizeCmd, (rErr, rOut, rStderr) => {
-                                            console.log("[GRID] ✓ " + pkg + " gridded! Applying final lock...");
+                                        // Ambil Task ID & Stack ID
+                                        exec('su -c "dumpsys activity activities"', (dErr, dOut) => {
+                                            const lines = dOut.split('\n');
+                                            let foundTaskId = null;
+                                            let foundStackId = null;
                                             
-                                            // 5. FINAL LOCK: PINDAHIN TASK KE STACK YANG UDAH DIRESIZE
-                                            setTimeout(() => {
-                                                exec('su -c "am task resize ' + foundTaskId + ' ' + 
-                                                    bounds.l + ' ' + bounds.t + ' ' + 
-                                                    bounds.r + ' ' + bounds.b + '"', () => {});
-                                            }, 500);
+                                            for (let line of lines) {
+                                                if (line.includes('TaskRecord{') && line.includes(pkg)) {
+                                                    let taskMatch = line.match(/#(\d+)/);
+                                                    let stackMatch = line.match(/StackId=(\d+)/);
+                                                    if (taskMatch && taskMatch[1]) foundTaskId = taskMatch[1];
+                                                    if (stackMatch && stackMatch[1]) foundStackId = stackMatch[1];
+                                                    break;
+                                                }
+                                            }
+                                            
+                                            if (foundTaskId && foundTaskId !== "0") {
+                                                console.log("[GRID] Found Task ID: " + foundTaskId + ", Stack ID: " + foundStackId);
+                                                
+                                                // RESIZE COMMAND GABUNGAN
+                                                var resizeCmd = 'su -c "am stack resize ' + foundStackId + ' ' + 
+                                                                bounds.l + ' ' + bounds.t + ' ' + 
+                                                                bounds.r + ' ' + bounds.b + ' && am task resize ' + foundTaskId + ' ' + 
+                                                                bounds.l + ' ' + bounds.t + ' ' + 
+                                                                bounds.r + ' ' + bounds.b + '"';
+                                                
+                                                exec(resizeCmd, () => {
+                                                    // LOCK ULANG SETELAH 1 DETIK
+                                                    setTimeout(() => {
+                                                        exec('su -c "am task resize ' + foundTaskId + ' ' + 
+                                                            bounds.l + ' ' + bounds.t + ' ' + 
+                                                            bounds.r + ' ' + bounds.b + '"', () => {
+                                                            console.log("[GRID] ✓ " + pkg + " gridded successfully!");
+                                                        });
+                                                    }, 1000);
+                                                });
+                                            }
                                         });
                                     } else {
-                                        console.log("[GRID] Task ID still not found for " + pkg);
+                                        // Belom loaded, cek lagi 1 detik lagi
+                                        setTimeout(() => checkLoaded(retryCount + 1), 1000);
                                     }
                                 });
-                            }, 4000);
+                            };
+                            
+                            // Mulai polling setelah 2 detik jeda awal
+                            setTimeout(() => checkLoaded(0), 2000);
                         });
                     });
                 });
