@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== 1111 ===${NC}"
+    echo -e "${RED}=== LLLLLKKXXS ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -213,96 +213,75 @@ socket.on("execute_command", (data) => {
         }
         
         var processApp = function(pkg, index) {
-            exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err, actOut) => {
-                var activity = actOut ? actOut.trim() : "";
-                
-                if (err || !activity || activity.includes("No activity") || activity.includes("Error")) {
-                    console.log("[GRID] " + pkg + " has no UI/Activity. Skipping...");
-                    return;
-                }
-                
-                var bounds = gridSlots[index];
-                console.log("[GRID] Opening " + pkg + " (" + activity + ") in Freeform Mode...");
-                
-                exec('su -c "am start --windowingMode 4 -n ' + activity + '"', (launchErr) => {
-                    if (launchErr) {
-                        console.log("[GRID] Launch failed: " + launchErr.message);
-                        return;
-                    }
+            // 1. FORCE STOP & CLEAR CACHE DULU BIAR FRESH LAUNCH
+            console.log("[GRID] Force stopping & clearing cache for " + pkg + "...");
+            exec('su -c "am force-stop ' + pkg + '"', () => {
+                exec('su -c "rm -rf /data/data/' + pkg + '/cache/* /data/data/' + pkg + '/code_cache/*"', () => {
                     
-                    setTimeout(() => {
-                        exec('su -c "dumpsys activity activities"', (dumpErr, dumpOut) => {
-                            if (dumpErr || !dumpOut) {
-                                console.log("[GRID] dumpsys failed.");
+                    // 2. CARI ACTIVITY UTAMA
+                    exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err, actOut) => {
+                        var activity = actOut ? actOut.trim() : "";
+                        
+                        if (err || !activity || activity.includes("No activity") || activity.includes("Error")) {
+                            console.log("[GRID] " + pkg + " has no UI/Activity. Skipping...");
+                            return;
+                        }
+                        
+                        var bounds = gridSlots[index];
+                        console.log("[GRID] Opening " + pkg + " in Freeform Mode...");
+                        
+                        // 3. BUKA DI MODE FREEFORM
+                        exec('su -c "am start --windowingMode 4 -n ' + activity + '"', (launchErr) => {
+                            if (launchErr) {
+                                console.log("[GRID] Launch failed: " + launchErr.message);
                                 return;
                             }
                             
-                            const lines = dumpOut.split('\n');
-                            let foundTaskId = null;
-                            
-                            for (let line of lines) {
-                                // Cari baris kayak: * TaskRecord{3c1718a #413 A=com.roblox.clienu U=0 ...}
-                                if (line.includes('TaskRecord{') && line.includes(pkg)) {
-                                    let match = line.match(/#(\d+)/);
-                                    if (match && match[1]) {
-                                        foundTaskId = match[1];
-                                        break; // Langsung break krn itu task paling atas
-                                    }
-                                }
-                            }
-                            
-                            // Cari StackId juga buat bypass resizeTask not allowed
-                            let foundStackId = null;
-                            for (let line of lines) {
-                                if (line.includes('TaskRecord{') && line.includes(pkg)) {
-                                    let stackMatch = line.match(/StackId=(\d+)/);
-                                    if (stackMatch && stackMatch[1]) {
-                                        foundStackId = stackMatch[1];
-                                    }
-                                    break;
-                                }
-                            }
-                            
-                            if (foundTaskId && foundTaskId !== "0") {
-                                console.log("[GRID] Found Task ID: " + foundTaskId + ", Stack ID: " + foundStackId);
-                                
-                                // 1. Coba am stack resize (Bypass check resizeable)
-                                if (foundStackId) {
-                                    var stackCmd = 'su -c "am stack resize ' + foundStackId + ' ' + 
-                                                    bounds.l + ' ' + bounds.t + ' ' + 
-                                                    bounds.r + ' ' + bounds.b + '"';
+                            // 4. JEDA 4 DETIK BIAR ACTIVITY BENER-BENER KE-DAFTAR DI SISTEM
+                            setTimeout(() => {
+                                exec('su -c "dumpsys activity activities"', (dumpErr, dumpOut) => {
+                                    if (dumpErr || !dumpOut) return;
                                     
-                                    exec(stackCmd, (sErr, sOut, sStderr) => {
-                                        var sResult = (sOut || "") + (sStderr || "");
-                                        if (sResult.includes("Error") || sResult.includes("not allowed")) {
-                                            console.log("[GRID] Stack resize failed, trying am task resize...");
-                                            
-                                            // FALLBACK: am task resize
-                                            var resizeCmd = 'su -c "am task resize ' + foundTaskId + ' ' + 
-                                                            bounds.l + ' ' + bounds.t + ' ' + 
-                                                            bounds.r + ' ' + bounds.b + '"';
-                                            exec(resizeCmd, () => {
-                                                console.log("[GRID] ✓ " + pkg + " gridded via task resize!");
-                                            });
-                                        } else {
-                                            console.log("[GRID] ✓ " + pkg + " successfully gridded via stack resize!");
+                                    const lines = dumpOut.split('\n');
+                                    let foundTaskId = null;
+                                    let foundStackId = null;
+                                    
+                                    for (let line of lines) {
+                                        if (line.includes('TaskRecord{') && line.includes(pkg)) {
+                                            let taskMatch = line.match(/#(\d+)/);
+                                            let stackMatch = line.match(/StackId=(\d+)/);
+                                            if (taskMatch && taskMatch[1]) foundTaskId = taskMatch[1];
+                                            if (stackMatch && stackMatch[1]) foundStackId = stackMatch[1];
+                                            break;
                                         }
-                                    });
-                                } else {
-                                    // Kalau gak ada StackId, langsung am task resize
-                                    var resizeCmd = 'su -c "am task resize ' + foundTaskId + ' ' + 
-                                                    bounds.l + ' ' + bounds.t + ' ' + 
-                                                    bounds.r + ' ' + bounds.b + '"';
+                                    }
                                     
-                                    exec(resizeCmd, (rErr, rOut, rStderr) => {
-                                        console.log("[GRID] ✓ " + pkg + " successfully gridded via task resize!");
-                                    });
-                                }
-                            } else {
-                                console.log("[GRID] Task ID still not found for " + pkg);
-                            }
+                                    if (foundTaskId && foundTaskId !== "0") {
+                                        console.log("[GRID] Found Task ID: " + foundTaskId + ", Stack ID: " + foundStackId);
+                                        
+                                        var resizeCmd = 'su -c "am stack resize ' + foundStackId + ' ' + 
+                                                        bounds.l + ' ' + bounds.t + ' ' + 
+                                                        bounds.r + ' ' + bounds.b + ' && am task resize ' + foundTaskId + ' ' + 
+                                                        bounds.l + ' ' + bounds.t + ' ' + 
+                                                        bounds.r + ' ' + bounds.b + '"';
+                                        
+                                        exec(resizeCmd, (rErr, rOut, rStderr) => {
+                                            console.log("[GRID] ✓ " + pkg + " gridded! Applying final lock...");
+                                            
+                                            // 5. FINAL LOCK: PINDAHIN TASK KE STACK YANG UDAH DIRESIZE
+                                            setTimeout(() => {
+                                                exec('su -c "am task resize ' + foundTaskId + ' ' + 
+                                                    bounds.l + ' ' + bounds.t + ' ' + 
+                                                    bounds.r + ' ' + bounds.b + '"', () => {});
+                                            }, 500);
+                                        });
+                                    } else {
+                                        console.log("[GRID] Task ID still not found for " + pkg);
+                                    }
+                                });
+                            }, 4000);
                         });
-                    }, 4000);
+                    });
                 });
             });
         };
