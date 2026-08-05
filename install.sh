@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== HMSaller ===${NC}"
+    echo -e "${RED}=== xxxr ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -112,8 +112,15 @@ const runCmd = (cmd) => {
     });
 };
 
-// FUNGSI SMART DETECT
+let lastSyncTime = 0;
 const syncPackages = () => {
+    const now = Date.now();
+    if (now - lastSyncTime < 2000) {
+        console.log("[SYNC] Debounced. Ignoring request.");
+        return;
+    }
+    lastSyncTime = now;
+    
     exec('su -c "pm list packages -3"', (err, stdout) => {
         if (!err && stdout) {
             let allPkgs = stdout.trim().split('\n').map(line => line.replace('package:', '').trim());
@@ -223,35 +230,14 @@ socket.on("execute_command", (data) => {
                         return;
                     }
                     
-                    // JEDA 4 DETIK BIAR ACTIVITY BENER-BENER KE-DAFTAR DI SISTEM
                     setTimeout(() => {
-                        exec('su -c "dumpsys activity activities"', (dumpErr, dumpOut) => {
-                            if (dumpErr || !dumpOut) {
-                                console.log("[GRID] dumpsys failed.");
-                                return;
-                            }
+                        // PAKE BASH PARSER: AMBIL 15 BARIS SEBELUM PACKAGE NAME, CARI Task{... #123
+                        var getTaskCmd = 'su -c "dumpsys activity activities | grep -B 15 ' + pkg + ' | grep -oE \'#[0-9]+\' | head -n 1 | cut -d# -f2"';
+                        
+                        exec(getTaskCmd, (dumpErr, dumpOut) => {
+                            var taskId = dumpOut ? dumpOut.trim() : "";
                             
-                            // PARSER NODE.JS BIKINAN GUA (100% AKURAT DI ANDROID 10)
-                            const lines = dumpOut.split('\n');
-                            let currentTaskId = null;
-                            let foundTaskId = null;
-                            
-                            for (let line of lines) {
-                                // Cari baris kayak: * Task{abc123 #45 type=standard ...}
-                                let taskMatch = line.match(/Task\{[a-f0-9]+ #(\d+)/);
-                                if (taskMatch) {
-                                    currentTaskId = taskMatch[1];
-                                }
-                                
-                                // Kalau baris ini nampung nama package kita, ambil task ID-nya
-                                if (currentTaskId && line.includes(pkg)) {
-                                    foundTaskId = currentTaskId;
-                                    break; // Langsung break biar dapet yang paling atas (terbaru)
-                                }
-                            }
-                            
-                            if (foundTaskId) {
-                                var taskId = foundTaskId;
+                            if (taskId && !isNaN(taskId)) {
                                 console.log("[GRID] Found Task ID: " + taskId + ". Resizing to " + JSON.stringify(bounds) + "...");
                                 
                                 var resizeCmd = 'su -c "am task resize ' + taskId + ' ' + 
@@ -268,16 +254,16 @@ socket.on("execute_command", (data) => {
                                     }
                                 });
                             } else {
-                                console.log("[GRID] Task ID not found for " + pkg + " in dumpsys.");
+                                console.log("[GRID] Task ID still not found for " + pkg);
                             }
                         });
-                    }, 4000); // Naikin jadi 4 detik biar lebih safe
+                    }, 4000);
                 });
             });
         };
         
         pkgs.forEach((pkg, i) => {
-            setTimeout(() => processApp(pkg, i), i * 5000); // Jeda 5 detik per app
+            setTimeout(() => processApp(pkg, i), i * 5000);
         });
         
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Auto Grid started! Opening ' + pkgs.length + ' apps in Freeform Mode...', type: "success" });
