@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer AWIKGWOKG ===${NC}"
+    echo -e "${RED}=== ler ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -37,7 +37,6 @@ rm -rf ~/tinkerbell-bridge
 
 echo -e "${GREEN}=== Installing Required Packages ===${NC}"
 pkg uninstall nodejs -y > /dev/null 2>&1
-# TAMBAHIN aapt DI SINI BIAR AUTO INSTAL PAS AWAL RUN
 DEBIAN_FRONTEND=noninteractive pkg install -y openssl nodejs-lts unzip aapt -o Dpkg::Options::="--force-confold" -o Dpkg::Options::="--force-confdef" < /dev/null
 
 echo -e "${GREEN}=== Setting Up Bridge Environment ===${NC}"
@@ -90,25 +89,28 @@ const socket = io(VPS_URL, {
     auth: { licenseKey: LICENSE_KEY, deviceId: DEVICE_ID }
 });
 
+// PREFIX FILTER DEFAULT
+let currentPrefixes = ['com.roblox'];
+try {
+    if (fs.existsSync('prefix.txt')) {
+        const savedPrefix = fs.readFileSync('prefix.txt', 'utf8').trim();
+        if (savedPrefix) {
+            currentPrefixes = savedPrefix.split('\n').map(p => p.trim()).filter(p => p);
+        }
+    }
+} catch (e) {}
+
 socket.on("connect", () => {
     console.log("[✓] Connected to Dashboard!");
     socket.emit("device_connect", { ip: "Cloud Phone", maxPackages: 10 });
-    syncPackages(); // PANGGIL SAAT BARU CONNECT
+    syncPackages();
 });
 
-// TAMBAHKAN BLOK INI (Auto-sync tiap 15 detik)
 setInterval(() => {
     if (socket.connected) {
         syncPackages();
     }
 }, 15000);
-
-socket.on("connect_error", (err) => {
-    console.log("[!] Connection Failed: " + err.message);
-    if (err.message.includes("Authentication failed") || err.message.includes("Invalid License Key") || err.message.includes("Device limit reached") || err.message.includes("License not activated")) {
-        process.exit(1);
-    }
-});
 
 const runCmd = (cmd) => {
     exec(cmd, (error, stdout, stderr) => {
@@ -116,14 +118,16 @@ const runCmd = (cmd) => {
     });
 };
 
-// FUNGSI SMART DETECT: Scan package asli di HP, filter sampah, kirim ke backend
+// FUNGSI SMART DETECT
 const syncPackages = () => {
     exec('su -c "pm list packages -3"', (err, stdout) => {
         if (!err && stdout) {
-            let pkgs = stdout.trim().split('\n').map(line => line.replace('package:', '').trim());
-            // FILTER OUT TERMUX & TINKERBELL HELPER BIAR DASHBOARD CLEAN
-            pkgs = pkgs.filter(p => p && p !== 'com.termux' && p !== 'com.tinkerbell.helper');
-            socket.emit("sync_packages", { deviceId: DEVICE_ID, packages: pkgs });
+            let allPkgs = stdout.trim().split('\n').map(line => line.replace('package:', '').trim());
+            let matchedPkgs = allPkgs.filter(pkg => {
+                return currentPrefixes.some(prefix => pkg.toLowerCase().startsWith(prefix.toLowerCase()));
+            });
+            console.log("[SYNC] Found " + matchedPkgs.length + " packages matching prefix.");
+            socket.emit("sync_packages", { deviceId: DEVICE_ID, packages: matchedPkgs });
         }
     });
 };
@@ -141,7 +145,6 @@ socket.on("execute_command", (data) => {
         exec('su -c "wm density 192"', () => {});
         exec('su -c "pm clear com.android.launcher3"', () => {});
         
-        // UNINSTALL SEMUA APP PIHAK KETIGA KECUALI TERMUX (PAKE NODEJS LOOP)
         exec('su -c "pm list packages -3"', (err, stdout) => {
             if (!err && stdout) {
                 stdout.trim().split('\n').forEach(pkgLine => {
@@ -153,21 +156,17 @@ socket.on("execute_command", (data) => {
             }
         });
         
-        // WIPE FILE SAMPAH
         exec('su -c "rm -rf /sdcard/* /storage/emulated/0/* /data/local/tmp/*"', () => {});
         exec('su -c "rm -rf /data/dalvik-cache/*"', () => {});
-        syncPackages(); // LANGSUNG SYNC SAAT SELESAI CLEAN
+        
+        syncPackages();
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device wiped clean! All apps & files removed.', type: "success" });
         console.log("[CMD] Successfully Cleaning Device");
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
         runCmd('su -c "reboot"');
-    }        
-    else if (data.command === 'sync_packages') {
-        console.log("[CMD] Manual package sync requested...");
-        syncPackages();
-    }
+    }    
     else if (data.command === 'open_all_packages') {
         var pkgs = data.payload.packages || [];
         if (pkgs.length === 0) {
@@ -178,7 +177,7 @@ socket.on("execute_command", (data) => {
         pkgs.forEach((pkg, i) => {
             setTimeout(() => {
                 exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {});
-            }, i * 1000); // JEDA 1 DETIK BIAR GAK CRASH
+            }, i * 1000);
         });
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Opened ' + pkgs.length + ' packages successfully!', type: "success" });
     }    
@@ -193,10 +192,9 @@ socket.on("execute_command", (data) => {
         
         console.log("[GRID] Starting Auto Grid for " + pkgs.length + " apps...");
         
-        // Screen 1280x720. Kalkulasi Posisi Grid (Max 2 Kolom)
         var cols = 2;
         var rows = Math.ceil(pkgs.length / cols);
-        if (rows > 5) rows = 5; // Max 2x5
+        if (rows > 5) rows = 5;
         
         var slotW = Math.floor(1280 / cols);
         var slotH = Math.floor(720 / rows);
@@ -214,42 +212,35 @@ socket.on("execute_command", (data) => {
         }
         
         var processApp = function(pkg, index) {
-            // 1. Cari activity utama
             exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err, actOut) => {
-                if (err || !actOut || !actOut.trim()) {
-                    console.log("[GRID] Activity not found, fallback monkey...");
-                    exec('su -c "monkey -p ' + pkg + ' 1"', () => {});
+                var activity = actOut ? actOut.trim() : "";
+                
+                if (err || !activity || activity.includes("No activity") || activity.includes("Error")) {
+                    console.log("[GRID] " + pkg + " has no UI/Activity. Skipping...");
                     return;
                 }
                 
-                var activity = actOut.trim();
                 var bounds = gridSlots[index];
+                console.log("[GRID] Opening " + pkg + " (" + activity + ") in Freeform Mode...");
                 
-                console.log("[GRID] Opening " + pkg + " in Freeform Mode...");
-                
-                // 2. Buka langsung di mode Freeform (windowingMode 4)
                 exec('su -c "am start --windowingMode 4 -n ' + activity + '"', (launchErr) => {
                     if (launchErr) {
                         console.log("[GRID] Launch failed: " + launchErr.message);
                         return;
                     }
                     
-                    // 3. Kasih jeda 3 detik biar tasknya kebentuk di sistem
                     setTimeout(() => {
-                        // 4. Ambil Task ID spesifik buat package ini dari dumpsys
                         exec('su -c "dumpsys activity activities | grep -B 2 ' + pkg + ' | grep taskId"', (dumpErr, dumpOut) => {
                             if (dumpErr || !dumpOut) {
                                 console.log("[GRID] Task ID not found for " + pkg);
                                 return;
                             }
                             
-                            // Regex ambil angka taskId=1234
                             var match = dumpOut.match(/taskId=(\d+)/);
                             if (match && match[1]) {
                                 var taskId = match[1];
-                                console.log("[GRID] Found Task ID: " + taskId + ". Resizing to " + JSON.stringify(bounds) + "...");
+                                console.log("[GRID] Found Task ID: " + taskId + ". Resizing...");
                                 
-                                // 5. AM TASK RESIZE (Karena udah Freeform & resizeable=true, ini bakal NURUT)
                                 var resizeCmd = 'su -c "am task resize ' + taskId + ' ' + 
                                                 bounds.l + ' ' + bounds.t + ' ' + 
                                                 bounds.r + ' ' + bounds.b + '"';
@@ -258,7 +249,6 @@ socket.on("execute_command", (data) => {
                                     var result = (rOut || "") + (rStderr || "");
                                     if (result.includes("not allowed") || result.includes("Error")) {
                                         console.log("[GRID] ✗ Resize failed: " + result.trim());
-                                        // FALLBACK: cmd activity resize
                                         exec('su -c "cmd activity resize ' + taskId + ' ' + bounds.l + ' ' + bounds.t + ' ' + bounds.r + ' ' + bounds.b + '"', () => {});
                                     } else {
                                         console.log("[GRID] ✓ " + pkg + " successfully gridded!");
@@ -266,17 +256,25 @@ socket.on("execute_command", (data) => {
                                 });
                             }
                         });
-                    }, 3000); // Jeda 3 detik
+                    }, 3000);
                 });
             });
         };
         
-        // Jalanin proses app satu-satu tiap 4 detik biar gak nabrak
         pkgs.forEach((pkg, i) => {
             setTimeout(() => processApp(pkg, i), i * 4000);
         });
         
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Auto Grid started! Opening ' + pkgs.length + ' apps in Freeform Mode...', type: "success" });
+    }
+    else if (data.command === 'sync_packages') {
+        if (data.payload && Array.isArray(data.payload.prefixes)) {
+            currentPrefixes = data.payload.prefixes.filter(p => p.trim() !== '');
+            fs.writeFileSync('prefix.txt', currentPrefixes.join('\n'));
+            console.log("[CMD] Prefix updated & saved: " + JSON.stringify(currentPrefixes));
+        }
+        console.log("[CMD] Syncing packages...");
+        syncPackages();
     }
     else if (data.command === 'install_apk') {
         var apkUrl = data.payload.url;
@@ -323,19 +321,22 @@ socket.on("execute_command", (data) => {
                                         console.log("[INSTALL] Auto opening " + pkg + "...");
                                         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Opening " + name + "...", type: "info" });
                                         
-                                        // BUKA APK PAKE MONKEY BIASA
                                         exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {
                                             exec('rm -f ' + tmpPath);
+                                            syncPackages();
                                         });
-
-                                        syncPackages(); // LANGSUNG SYNC SAAT SELESAI INSTALL
                                     } else {
                                         exec('rm -f ' + tmpPath);
+                                        syncPackages();
                                     }
                                 } else {
                                     exec('rm -f ' + tmpPath);
+                                    syncPackages();
                                 }
                             });
+                        } else {
+                            exec('rm -f ' + tmpPath);
+                            syncPackages();
                         }
                     } else {
                         console.log("[INSTALL] Installation Failed: " + output);
