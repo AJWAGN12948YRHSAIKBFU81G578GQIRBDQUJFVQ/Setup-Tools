@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer YTIM ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer REMI ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -168,30 +168,90 @@ socket.on("execute_command", (data) => {
         
         console.log("[GRID] Starting Auto Grid for " + pkgs.length + " apps...");
         
-        // 1. KIRIM SINYAL BROADCAST KE TINKERBELL HELPER
-        exec('su -c "am broadcast -a com.tinkerbell.SET_GRID --ei total ' + totalGrid + '"', () => {});
+        // Screen 1280x720. Kalkulasi Posisi Grid (Max 2 Kolom)
+        var cols = 2;
+        var rows = Math.ceil(pkgs.length / cols);
+        if (rows > 5) rows = 5; // Max 2x5
         
-        // 2. BUKA APPS SATU PER SATU DI MODE FREEFORM (WINDOWINGMODE 4)
-        pkgs.forEach((pkg, i) => {
-            setTimeout(() => {
-                // CARI ACTIVITY UTAMA APP
-                exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err, actOut) => {
-                    if (!err && actOut) {
-                        const activity = actOut.trim();
-                        if (activity) {
-                            console.log("[GRID] Opening " + pkg + " in Freeform...");
-                            // BUKA DI MODE FREEFORM
-                            exec('su -c "am start --windowingMode 4 -n ' + activity + '"', () => {});
-                        }
-                    } else {
-                        // FALLBACK KALO ACTIVITY GAK KETEMU
-                        exec('su -c "monkey -p ' + pkg + ' 1"', () => {});
-                    }
+        var slotW = Math.floor(1280 / cols);
+        var slotH = Math.floor(720 / rows);
+        
+        var gridSlots = [];
+        for (var r = 0; r < rows; r++) {
+            for (var c = 0; c < cols; c++) {
+                gridSlots.push({
+                    l: c * slotW,
+                    t: r * slotH,
+                    r: (c + 1) * slotW,
+                    b: (r + 1) * slotH
                 });
-            }, i * 3000); // JEDA 3 DETIK BIAR APK HELPER ADA WAKTU NGE-GRID
+            }
+        }
+        
+        var processApp = function(pkg, index) {
+            // 1. Cari activity utama
+            exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err, actOut) => {
+                if (err || !actOut || !actOut.trim()) {
+                    console.log("[GRID] Activity not found, fallback monkey...");
+                    exec('su -c "monkey -p ' + pkg + ' 1"', () => {});
+                    return;
+                }
+                
+                var activity = actOut.trim();
+                var bounds = gridSlots[index];
+                
+                console.log("[GRID] Opening " + pkg + " in Freeform Mode...");
+                
+                // 2. Buka langsung di mode Freeform (windowingMode 4)
+                exec('su -c "am start --windowingMode 4 -n ' + activity + '"', (launchErr) => {
+                    if (launchErr) {
+                        console.log("[GRID] Launch failed: " + launchErr.message);
+                        return;
+                    }
+                    
+                    // 3. Kasih jeda 3 detik biar tasknya kebentuk di sistem
+                    setTimeout(() => {
+                        // 4. Ambil Task ID spesifik buat package ini dari dumpsys
+                        exec('su -c "dumpsys activity activities | grep -B 2 ' + pkg + ' | grep taskId"', (dumpErr, dumpOut) => {
+                            if (dumpErr || !dumpOut) {
+                                console.log("[GRID] Task ID not found for " + pkg);
+                                return;
+                            }
+                            
+                            // Regex ambil angka taskId=1234
+                            var match = dumpOut.match(/taskId=(\d+)/);
+                            if (match && match[1]) {
+                                var taskId = match[1];
+                                console.log("[GRID] Found Task ID: " + taskId + ". Resizing to " + JSON.stringify(bounds) + "...");
+                                
+                                // 5. AM TASK RESIZE (Karena udah Freeform & resizeable=true, ini bakal NURUT)
+                                var resizeCmd = 'su -c "am task resize ' + taskId + ' ' + 
+                                                bounds.l + ' ' + bounds.t + ' ' + 
+                                                bounds.r + ' ' + bounds.b + '"';
+                                
+                                exec(resizeCmd, (rErr, rOut, rStderr) => {
+                                    var result = (rOut || "") + (rStderr || "");
+                                    if (result.includes("not allowed") || result.includes("Error")) {
+                                        console.log("[GRID] ✗ Resize failed: " + result.trim());
+                                        // FALLBACK: cmd activity resize
+                                        exec('su -c "cmd activity resize ' + taskId + ' ' + bounds.l + ' ' + bounds.t + ' ' + bounds.r + ' ' + bounds.b + '"', () => {});
+                                    } else {
+                                        console.log("[GRID] ✓ " + pkg + " successfully gridded!");
+                                    }
+                                });
+                            }
+                        });
+                    }, 3000); // Jeda 3 detik
+                });
+            });
+        };
+        
+        // Jalanin proses app satu-satu tiap 4 detik biar gak nabrak
+        pkgs.forEach((pkg, i) => {
+            setTimeout(() => processApp(pkg, i), i * 4000);
         });
         
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Auto Grid started! Opening ' + pkgs.length + ' apps...', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Auto Grid started! Opening ' + pkgs.length + ' apps in Freeform Mode...', type: "success" });
     }
     else if (data.command === 'install_apk') {
         var apkUrl = data.payload.url;
