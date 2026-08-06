@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== WAK TEMPEK ===${NC}"
+    echo -e "${RED}=== PUNGKER ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -139,41 +139,111 @@ socket.on("execute_command", (data) => {
     if (data.command === 'clean_device') {
         console.log("[CMD] Cleaning Device...");
         
+        // 0. WAJIB: ENABLE BALIK PACKAGE SISTEM YANG KEDISABLE DARI CODE LAMA (FIX CRASH APP INFO)
+        exec('su -c "pm enable com.android.permissioncontroller"', () => {});
+        exec('su -c "pm enable com.android.packageinstaller"', () => {});
+        exec('su -c "pm enable com.android.providers.telephony"', () => {});
+        exec('su -c "pm enable com.android.providers.calendar"', () => {});
+        exec('su -c "pm enable com.android.providers.downloads"', () => {});
+        exec('su -c "pm enable com.android.networkstack"', () => {});
+        
+        // 1. FORCE ENABLE DEVELOPER OPTIONS (Silent)
         exec('su -c "settings put global development_settings_enabled 1"', () => {});
         exec('su -c "settings put global enable_freeform_support 1"', () => {});
         exec('su -c "settings put global force_resizable_activities 1"', () => {});
         exec('su -c "settings put global allow_non_resizable_multi_window 1"', () => {});
         exec('su -c "wm density 192"', () => {});
-        exec('su -c "pm clear com.android.launcher3"', () => {});
         
-        // UNINSTALL SEMUA APP PIHAK KETIGA KECUALI TERMUX & TINKERBELL HELPER
+        // 2. LIST BLOATWARE YANG AMAN DI-UNINSTALL/DISABLE
+        const apps = [
+            "com.android.tools",               // Tools RF
+            "com.android.toolkit",             // Toolbox RF
+            "com.android.adbkeyboard",         // Tobitx / ADB Keyboard RF
+            "com.android.chrome",              
+            "com.android.vending",             
+            "com.android.market",
+            "com.google.android.play.games",
+            "com.google.android.apps.nbu.files",
+            "com.android.contacts",
+            "com.android.messaging",
+            "com.android.mms.service",
+            "com.android.dialer",
+            "com.android.calendar",
+            "com.android.deskclock",           
+            "com.android.gallery3d",
+            "com.android.music",
+            "com.android.musicfx",
+            "com.android.soundrecorder",
+            "com.android.email",
+            "com.android.quicksearchbox",
+            "com.android.egg",                 
+            "com.android.printspooler",
+            "com.android.bips",
+            "com.android.printservice.recommendation",
+            "com.android.dreams.basic",        
+            "com.android.dreams.phototable",
+            "com.android.bluetoothmidiservice",
+            "com.android.bluetooth",
+            "com.android.nfc",
+            "com.android.providers.downloads.ui",
+            "com.android.hotspot2",
+            "com.android.bookmarkprovider",
+            "com.android.cellbroadcastreceiver",
+            "com.android.emergency",
+            "com.android.ons",
+            "com.android.simappdialog",
+            "com.android.carrierconfig",
+            "com.android.carrierdefaultapp",
+            "com.android.networkstack.permissionconfig",
+            "com.android.captiveportallogin",
+            "com.android.localtransport",
+            "com.android.proxyhandler",
+            "com.android.sharedstoragebackup",
+            "com.android.statementservice",
+            "com.android.calllogbackup",
+            "com.android.backupconfirm",
+            "com.android.providers.userdictionary",
+            "com.android.providers.blockednumber"
+        ];
+        
+        // 3. LIST APPS YANG CUMA BOLEH DI-DISABLE (JANGAN DI-UNINSTALL)
+        const disableOnly = [
+            "com.google.android.gms",                  // Google Play Services
+            "com.android.inputmethod.latin",           // Android Keyboard (AOSP)
+            "com.google.android.inputmethod.latin"     // Gboard
+        ];
+        
+        // LOOPING: COBA UNINSTALL, KALO GAGAL LANGSUNG DISABLE
+        apps.forEach(pkg => {
+            exec('su -c "pm uninstall --user 0 ' + pkg + ' 2>/dev/null || pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
+        });
+        
+        // LOOPING DISABLE ONLY (Paksa disable tanpa uninstall)
+        disableOnly.forEach(pkg => {
+            exec('su -c "pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
+        });
+
+        // 4. UNINSTALL SEMUA APP PIHAK KETIGA (-3) KECUALI TERMUX (PAKE NODEJS LOOP)
         exec('su -c "pm list packages -3"', (err, stdout) => {
             if (!err && stdout) {
-                let lines = stdout.trim().split('\n');
-                lines.forEach(line => {
-                    let pkg = line.replace('package:', '').trim();
-                    // PASTIIN JANGAN UNINSTALL TERMUX DAN TINKERBELL HELPER KITA
-                    if (pkg && pkg !== 'com.termux' && pkg !== 'com.tinkerbell.helper') {
-                        console.log("[CLEAN] Uninstalling: " + pkg);
-                        // PAKSA UNINSTALL USER 0
-                        exec('su -c "pm uninstall --user 0 ' + pkg + '"', (unErr, unOut) => {
-                            if (unErr) {
-                                // KALO GAGAL, DISABLE PAKSA
-                                exec('su -c "pm disable-user --user 0 ' + pkg + '"', () => {});
-                            }
-                        });
+                stdout.trim().split('\n').forEach(pkgLine => {
+                    const pkg = pkgLine.replace('package:', '').trim();
+                    if (pkg && pkg !== 'com.termux') {
+                        exec('su -c "pm uninstall --user 0 ' + pkg + ' || pm disable-user --user 0 ' + pkg + ' || pm hide ' + pkg + '"', () => {});
                     }
                 });
-            } else {
-                console.log("[CLEAN] Failed to get package list.");
             }
         });
         
-        // WIPE FILE SAMPAH
+        // 5. WIPE SEMUA FILE SAMPAH DI PENYIMPANAN INTERNAL (Download, APK, Bot files, dll)
         exec('su -c "rm -rf /sdcard/* /storage/emulated/0/* /data/local/tmp/*"', () => {});
+        
+        // 6. BERSIHKAN CACHE SISTEM BIAR RAM SEGAR KAYAK BARU BELI
         exec('su -c "rm -rf /data/dalvik-cache/*"', () => {});
         
-        syncPackages(); // UPDATE LIST DI DASHBOARD
+        // 7. BERSIHKAN SHORTCUT IKLAN DI HOME SCREEN (LAUNCHER)
+        exec('su -c "pm clear com.android.launcher3"', () => {});
+        
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device wiped clean! All apps & files removed.', type: "success" });
         console.log("[CMD] Successfully Cleaning Device");
     } 
