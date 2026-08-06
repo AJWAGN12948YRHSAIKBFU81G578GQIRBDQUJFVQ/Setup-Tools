@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== 77777 ===${NC}"
+    echo -e "${RED}=== WAK TEMPEK ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -146,21 +146,34 @@ socket.on("execute_command", (data) => {
         exec('su -c "wm density 192"', () => {});
         exec('su -c "pm clear com.android.launcher3"', () => {});
         
+        // UNINSTALL SEMUA APP PIHAK KETIGA KECUALI TERMUX & TINKERBELL HELPER
         exec('su -c "pm list packages -3"', (err, stdout) => {
             if (!err && stdout) {
-                stdout.trim().split('\n').forEach(pkgLine => {
-                    const pkg = pkgLine.replace('package:', '').trim();
-                    if (pkg && pkg !== 'com.termux') {
-                        exec('su -c "pm uninstall --user 0 ' + pkg + ' || pm disable-user --user 0 ' + pkg + ' || pm hide ' + pkg + '"', () => {});
+                let lines = stdout.trim().split('\n');
+                lines.forEach(line => {
+                    let pkg = line.replace('package:', '').trim();
+                    // PASTIIN JANGAN UNINSTALL TERMUX DAN TINKERBELL HELPER KITA
+                    if (pkg && pkg !== 'com.termux' && pkg !== 'com.tinkerbell.helper') {
+                        console.log("[CLEAN] Uninstalling: " + pkg);
+                        // PAKSA UNINSTALL USER 0
+                        exec('su -c "pm uninstall --user 0 ' + pkg + '"', (unErr, unOut) => {
+                            if (unErr) {
+                                // KALO GAGAL, DISABLE PAKSA
+                                exec('su -c "pm disable-user --user 0 ' + pkg + '"', () => {});
+                            }
+                        });
                     }
                 });
+            } else {
+                console.log("[CLEAN] Failed to get package list.");
             }
         });
         
+        // WIPE FILE SAMPAH
         exec('su -c "rm -rf /sdcard/* /storage/emulated/0/* /data/local/tmp/*"', () => {});
         exec('su -c "rm -rf /data/dalvik-cache/*"', () => {});
         
-        syncPackages();
+        syncPackages(); // UPDATE LIST DI DASHBOARD
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device wiped clean! All apps & files removed.', type: "success" });
         console.log("[CMD] Successfully Cleaning Device");
     } 
