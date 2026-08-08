@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== PUNGKER ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -267,129 +267,72 @@ socket.on("execute_command", (data) => {
     }    
     else if (data.command === 'auto_grid') {
         var pkgs = data.payload.packages || [];
-        var totalGrid = data.payload.totalGrid || pkgs.length;
-        
         if (pkgs.length === 0) {
             socket.emit("device_log", { deviceId: DEVICE_ID, message: "No packages to grid.", type: "error" });
             return;
         }
         
-        console.log("[GRID] Starting Auto Grid for " + pkgs.length + " apps...");
+        var totalGrid = pkgs.length;
+        console.log("[GRID] Starting Auto Grid for " + totalGrid + " apps...");
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Auto Grid started! Opening ' + totalGrid + ' apps...', type: "success" });
         
-        var cols = 2;
-        var rows = Math.ceil(pkgs.length / cols);
-        if (rows > 5) rows = 5;
-        
-        // FIX: Paksa rasio landscape (640x360 buat 2x2)
-        var slotW = Math.floor(1280 / cols);  // 640
-        var slotH = Math.floor(720 / rows);   // 360 (kalau 2 rows), 240 (kalau 3 rows), dll
-        
-        var gridSlots = [];
-        for (var r = 0; r < rows; r++) {
-            for (var c = 0; c < cols; c++) {
-                gridSlots.push({
-                    l: c * slotW,
-                    t: r * slotH,
-                    r: (c + 1) * slotW,
-                    b: (r + 1) * slotH
-                });
-            }
-        }
-        
-        var processApp = function(pkg, index) {
-            console.log("[GRID] Force stopping & clearing cache for " + pkg + "...");
-            exec('su -c "am force-stop ' + pkg + '"', () => {
-                exec('su -c "rm -rf /data/data/' + pkg + '/cache/* /data/data/' + pkg + '/code_cache/*"', () => {
+        // 1. DETEKSI RESOLUSI LAYAR
+        exec('su -c "wm size"', (err, stdout) => {
+            if (err) return;
+            var sizeStr = stdout.split(' ').pop(); // e.g., 1280x720
+            var parts = sizeStr.split('x');
+            var w = parseInt(parts[0]);
+            var h = parseInt(parts[1]);
+            
+            // Fix landscape
+            var SW = w < h ? h : w;
+            var SH = w < h ? w : h;
+            
+            // 2. HITUNG GRID (MAX 2 KOLOM)
+            var cols = 2;
+            var rows = Math.ceil(totalGrid / cols);
+            
+            var OFFSET_TOP = 60; // Biar gak nabrak status bar atas RF
+            var AVAILABLE_H = SH - OFFSET_TOP;
+            var GW = Math.floor(SW / cols);
+            var GH = Math.floor(AVAILABLE_H / rows);
+            
+            // 3. LOOPING EKSEKUSI
+            pkgs.forEach((pkg, i) => {
+                setTimeout(() => {
+                    var row = Math.floor(i / cols);
+                    var col = i % cols;
                     
-                    // 1. INJECT GLOBAL SETTINGS BUAT BYPASS LOCK ORIENTATION (TANPA MOD APK)
-                    exec('su -c "settings put global force_resizable_activities 1"', () => {});
-                    exec('su -c "settings put global allow_non_resizable_multi_window 1"', () => {});
-                    exec('su -c "settings put global always_finish_activities 0"', () => {});
+                    var L = col * GW;
+                    var T = (row * GH) + OFFSET_TOP;
+                    var R = (col + 1) * GW;
+                    var B = ((row + 1) * GH) + OFFSET_TOP;
                     
-                    exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err, actOut) => {
-                        var activity = actOut ? actOut.trim() : "";
+                    var prefPath = `/data/data/${pkg}/shared_prefs/${pkg}_preferences.xml`;
+                    var activityName = `${pkg}/com.roblox.client.startup.ActivitySplash`;
+                    
+                    console.log(`[GRID] ${pkg} -> L:${L} T:${T} R:${R} B:${B}`);
+                    
+                    // Gabungin semua command jadi 1 eksekusi biar cepet & akurat
+                    var cmd = `su -c "
+                        am force-stop ${pkg} 2>/dev/null;
+                        chmod 666 ${prefPath} 2>/dev/null;
                         
-                        if (err || !activity || activity.includes("No activity") || activity.includes("Error")) {
-                            console.log("[GRID] " + pkg + " has no UI/Activity. Skipping...");
-                            return;
-                        }
+                        sed -i 's/name=\\"app_cloner_current_window_left\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_left\\" value=\\"${L}\\"/g' ${prefPath};
+                        sed -i 's/name=\\"app_cloner_current_window_top\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_top\\" value=\\"${T}\\"/g' ${prefPath};
+                        sed -i 's/name=\\"app_cloner_current_window_right\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_right\\" value=\\"${R}\\"/g' ${prefPath};
+                        sed -i 's/name=\\"app_cloner_current_window_bottom\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_bottom\\" value=\\"${B}\\"/g' ${prefPath};
                         
-                        var bounds = gridSlots[index];
-                        console.log("[GRID] Opening " + pkg + " in Freeform Mode...");
-                        
-                        // 2. BUKA DI MODE FREEFORM
-                        exec('su -c "am start --windowingMode 4 -n ' + activity + '"', (launchErr) => {
-                            if (launchErr) {
-                                console.log("[GRID] Launch failed: " + launchErr.message);
-                                return;
-                            }
-                            
-                            // 3. SMART POLLING: Tunggu app fully loaded
-                            var checkLoaded = function(retryCount) {
-                                if (retryCount > 30) {
-                                    console.log("[GRID] Timeout waiting for " + pkg + " to load.");
-                                    return;
-                                }
-                                
-                                exec('su -c "dumpsys activity activities | grep mResumedActivity"', (dumpErr, dumpOut) => {
-                                    if (dumpOut && dumpOut.includes(pkg)) {
-                                        console.log("[GRID] " + pkg + " is fully loaded! Applying grid bounds...");
-                                        
-                                        exec('su -c "dumpsys activity activities"', (dErr, dOut) => {
-                                            const lines = dOut.split('\n');
-                                            let foundTaskId = null;
-                                            let foundStackId = null;
-                                            
-                                            for (let line of lines) {
-                                                if (line.includes('TaskRecord{') && line.includes(pkg)) {
-                                                    let taskMatch = line.match(/#(\d+)/);
-                                                    let stackMatch = line.match(/StackId=(\d+)/);
-                                                    if (taskMatch && taskMatch[1]) foundTaskId = taskMatch[1];
-                                                    if (stackMatch && stackMatch[1]) foundStackId = stackMatch[1];
-                                                    break;
-                                                }
-                                            }
-                                            
-                                            if (foundTaskId && foundTaskId !== "0") {
-                                                console.log("[GRID] Found Task ID: " + foundTaskId + ", Stack ID: " + foundStackId);
-                                                
-                                                // 4. RESIZE PAKAI STACK & TASK LANGSUNG
-                                                var resizeCmd = 'su -c "am stack resize ' + foundStackId + ' ' + 
-                                                                bounds.l + ' ' + bounds.t + ' ' + 
-                                                                bounds.r + ' ' + bounds.b + ' && am task resize ' + foundTaskId + ' ' + 
-                                                                bounds.l + ' ' + bounds.t + ' ' + 
-                                                                bounds.r + ' ' + bounds.b + '"';
-                                                
-                                                exec(resizeCmd, () => {
-                                                    // 5. LOCK ULANG SETELAH 1 DETIK
-                                                    setTimeout(() => {
-                                                        exec('su -c "am task resize ' + foundTaskId + ' ' + 
-                                                            bounds.l + ' ' + bounds.t + ' ' + 
-                                                            bounds.r + ' ' + bounds.b + '"', () => {
-                                                            console.log("[GRID] ✓ " + pkg + " gridded successfully!");
-                                                        });
-                                                    }, 1000);
-                                                });
-                                            }
-                                        });
-                                    } else {
-                                        setTimeout(() => checkLoaded(retryCount + 1), 1000);
-                                    }
-                                });
-                            };
-                            
-                            setTimeout(() => checkLoaded(0), 2000);
-                        });
+                        chmod 444 ${prefPath} 2>/dev/null;
+                        am start --user 0 -n ${activityName} 2>/dev/null
+                    "`;
+                    
+                    exec(cmd, () => {
+                        console.log(`[GRID] ✓ ${pkg} gridded successfully!`);
                     });
-                });
+                }, i * 15000); // Jeda 15 detik per app biar RF gak OOM
             });
-        };
-        
-        pkgs.forEach((pkg, i) => {
-            setTimeout(() => processApp(pkg, i), i * 5000);
         });
-        
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Auto Grid started! Opening ' + pkgs.length + ' apps in Freeform Mode...', type: "success" });
     }
     else if (data.command === 'sync_packages') {
         if (data.payload && Array.isArray(data.payload.prefixes)) {
