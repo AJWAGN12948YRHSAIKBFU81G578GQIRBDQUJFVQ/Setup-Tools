@@ -274,35 +274,28 @@ socket.on("execute_command", (data) => {
         
         var totalGrid = pkgs.length;
         console.log("[GRID] Starting Auto Grid for " + totalGrid + " apps...");
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Auto Grid started! Opening ' + totalGrid + ' apps...', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Auto Grid started! Cleaning up...', type: "grid_start" });
         
-        // 1. DETEKSI RESOLUSI LAYAR
         exec('su -c "wm size"', (err, stdout) => {
             if (err) return;
-            var sizeStr = stdout.split(' ').pop(); // e.g., 1280x720
+            var sizeStr = stdout.split(' ').pop(); 
             var parts = sizeStr.split('x');
             var w = parseInt(parts[0]);
             var h = parseInt(parts[1]);
-            
-            // Fix landscape
             var SW = w < h ? h : w;
             var SH = w < h ? w : h;
             
-            // 2. HITUNG GRID (MAX 2 KOLOM)
             var cols = 2;
             var rows = Math.ceil(totalGrid / cols);
-            
-            var OFFSET_TOP = 60; // Biar gak nabrak status bar atas RF
+            var OFFSET_TOP = 60; 
             var AVAILABLE_H = SH - OFFSET_TOP;
             var GW = Math.floor(SW / cols);
             var GH = Math.floor(AVAILABLE_H / rows);
             
-            // 3. LOOPING EKSEKUSI
             pkgs.forEach((pkg, i) => {
                 setTimeout(() => {
                     var row = Math.floor(i / cols);
                     var col = i % cols;
-                    
                     var L = col * GW;
                     var T = (row * GH) + OFFSET_TOP;
                     var R = (col + 1) * GW;
@@ -311,11 +304,14 @@ socket.on("execute_command", (data) => {
                     var prefPath = `/data/data/${pkg}/shared_prefs/${pkg}_preferences.xml`;
                     var activityName = `${pkg}/com.roblox.client.startup.ActivitySplash`;
                     
-                    console.log(`[GRID] ${pkg} -> L:${L} T:${T} R:${R} B:${B}`);
+                    // Emit Progress ke Web (Persentase)
+                    var percent = Math.round(((i + 1) / totalGrid) * 100);
+                    var msg = `Processing ${pkg} (${i+1}/${totalGrid})`;
+                    socket.emit("device_log", { deviceId: DEVICE_ID, message: msg, type: "grid_progress", percent: percent });
                     
-                    // Gabungin semua command jadi 1 eksekusi biar cepet & akurat
                     var cmd = `su -c "
                         am force-stop ${pkg} 2>/dev/null;
+                        rm -rf /data/data/${pkg}/cache/* /data/data/${pkg}/code_cache/* 2>/dev/null;
                         chmod 666 ${prefPath} 2>/dev/null;
                         
                         sed -i 's/name=\\"app_cloner_current_window_left\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_left\\" value=\\"${L}\\"/g' ${prefPath};
@@ -329,8 +325,11 @@ socket.on("execute_command", (data) => {
                     
                     exec(cmd, () => {
                         console.log(`[GRID] ✓ ${pkg} gridded successfully!`);
+                        if (i === pkgs.length - 1) {
+                            socket.emit("device_log", { deviceId: DEVICE_ID, message: 'All apps gridded successfully!', type: "grid_done" });
+                        }
                     });
-                }, i * 15000); // Jeda 15 detik per app biar RF gak OOM
+                }, i * 15000); 
             });
         });
     }
