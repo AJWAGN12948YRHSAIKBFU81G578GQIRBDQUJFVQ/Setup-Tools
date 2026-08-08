@@ -357,17 +357,17 @@ socket.on("execute_command", (data) => {
             var tmpPath = "/data/local/tmp/app_install_" + uniqueId + ".apk";
 
             console.log("[INSTALL] Downloading " + name + "...");
-            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + name + "...", type: "info" });
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + name + "...", type: "install_progress", percent: 25 });
 
             exec("curl -L -A 'Mozilla/5.0' -o " + downloadPath + " " + url, (error) => {
                 if (error) {
-                    console.log("[INSTALL] Download Failed: " + error.message);
-                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed for " + name, type: "error" });
-                    exec('rm -f ' + downloadPath);
+                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed for " + name, type: "install_progress", percent: 0 });
                     return;
                 }
                 
                 console.log("[INSTALL] Installing " + name + "...");
+                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installing " + name + "...", type: "install_progress", percent: 75 });
+                
                 var installCmd = 'su -c "cp ' + downloadPath + ' ' + tmpPath + ' && pm install -r ' + tmpPath + '"';
                 
                 exec(installCmd, (err2, stdout, stderr) => {
@@ -376,7 +376,7 @@ socket.on("execute_command", (data) => {
                     
                     if (output.includes("Success")) {
                         console.log("[INSTALL] " + name + " installed successfully!");
-                        socket.emit("device_log", { deviceId: DEVICE_ID, message: name + " installed successfully!", type: "success" });
+                        socket.emit("device_log", { deviceId: DEVICE_ID, message: name + " installed successfully!", type: "install_progress", percent: 100 });
                         
                         if (isExecutor) {
                             exec('su -c "/data/data/com.termux/files/usr/bin/aapt dump badging ' + tmpPath + ' | grep package"', (err3, pkgOut) => {
@@ -384,9 +384,7 @@ socket.on("execute_command", (data) => {
                                     const match = pkgOut.match(/name='([^']+)'/);
                                     if (match && match[1]) {
                                         const pkg = match[1];
-                                        console.log("[INSTALL] Auto opening " + pkg + "...");
-                                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Opening " + name + "...", type: "info" });
-                                        
+                                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Opening " + name + "...", type: "install_progress", percent: 100 });
                                         exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {
                                             exec('rm -f ' + tmpPath);
                                             syncPackages();
@@ -405,8 +403,7 @@ socket.on("execute_command", (data) => {
                             syncPackages();
                         }
                     } else {
-                        console.log("[INSTALL] Installation Failed: " + output);
-                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed for " + name + ": " + output.substring(0, 100), type: "error" });
+                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed for " + name, type: "install_progress", percent: 0 });
                         exec('rm -f ' + tmpPath);
                     }
                 });
