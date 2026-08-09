@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== JEMMM ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -491,6 +491,14 @@ socket.on("execute_command", (data) => {
     else {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Command " + data.command + " executed!", type: "success" });
     }
+});
+
+socket.on("license_revoked", () => {
+    console.log("[!] License revoked by server. Stopping bridge...");
+    socket.emit("device_log", { deviceId: DEVICE_ID, message: 'License revoked. Disconnecting...', type: "error" });
+    setTimeout(() => {
+        process.exit(1); // Bunuh proses Node.js di Termux
+    }, 1000);
 });
 
 socket.on("disconnect", () => { console.log("Disconnected. Reconnecting..."); });
