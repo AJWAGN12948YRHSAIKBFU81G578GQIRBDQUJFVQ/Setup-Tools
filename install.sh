@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+    echo -e "${RED}=== waktempekk ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -261,19 +261,40 @@ socket.on("execute_command", (data) => {
             return;
         }
         console.log("[CMD] Opening " + pkgs.length + " packages...");
+        
         pkgs.forEach((pkg, i) => {
             setTimeout(() => {
-                exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {});
-            }, i * 1000);
+                exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err, actOut) => {
+                    var activity = actOut ? actOut.trim() : "";
+                    if (err || !activity || activity.includes("No activity") || activity.includes("Error")) {
+                        console.log("[OPEN] " + pkg + " has no UI/Activity. Skipping...");
+                        return;
+                    }
+                    
+                    var cmd = `su -c "
+                        am force-stop ${pkg} 2>/dev/null;
+                        sleep 1;
+                        am start --user 0 -n ${activity} 2>/dev/null
+                    "`;
+                    exec(cmd, () => {
+                        console.log("[OPEN] ✓ " + pkg + " opened successfully!");
+                    });
+                });
+            }, i * 6000); // Jeda 6 detik per app
         });
+        
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Opened ' + pkgs.length + ' packages successfully!', type: "success" });
-    }    
+    }   
     else if (data.command === 'close_all_packages') {
         var pkgs = data.payload.packages || [];
         if (pkgs.length === 0) return;
         
-        pkgs.forEach(pkg => {
-            exec('su -c "am force-stop ' + pkg + ' && rm -rf /data/data/' + pkg + '/cache/* /data/data/' + pkg + '/code_cache/*"', () => {});
+        pkgs.forEach((pkg, i) => {
+            setTimeout(() => {
+                exec(`su -c "am force-stop ${pkg} && rm -rf /data/data/${pkg}/cache/* /data/data/${pkg}/code_cache/* 2>/dev/null"`, () => {
+                    console.log("[CLOSE] ✓ " + pkg + " closed & cache cleared!");
+                });
+            }, i * 1500); // Jeda 1.5 detik per app
         });
         
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Closed all packages & cleared cache!', type: "success" });
@@ -297,22 +318,20 @@ socket.on("execute_command", (data) => {
             var SW = w < h ? h : w;
             var SH = w < h ? w : h;
             
-            // LOGIC GRID SESUAI GAMBARAN LU:
             var cols, rows;
-            if (totalGrid === 1) {
-                cols = 1; rows = 1; // 1 App: Biarin default di tengah (gak di-grid)
-            } else if (totalGrid === 2) { cols = 2; rows = 1; } 
+            if (totalGrid === 1) { cols = 1; rows = 1; } 
+            else if (totalGrid === 2) { cols = 2; rows = 1; } 
             else if (totalGrid === 3) { cols = 3; rows = 1; } 
             else if (totalGrid === 4) { cols = 2; rows = 2; } 
             else if (totalGrid === 5) { cols = 5; rows = 1; } 
             else if (totalGrid === 6) { cols = 3; rows = 2; } 
             else if (totalGrid === 7 || totalGrid === 8) { cols = 4; rows = 2; } 
-            else { cols = 5; rows = 2; } // 9 & 10
+            else { cols = 5; rows = 2; }
             
             var OFFSET_TOP = 60; 
             var AVAILABLE_H = SH - OFFSET_TOP;
             var GW = Math.floor(SW / cols);
-            var GH = Math.floor(AVAILABLE_H / 2); // Tinggi selalu dibagi 2 (atas & bawah)
+            var GH = Math.floor(AVAILABLE_H / 2);
             
             pkgs.forEach((pkg, i) => {
                 setTimeout(() => {
@@ -334,9 +353,8 @@ socket.on("execute_command", (data) => {
                             return;
                         }
                         
-                        // KALAU CUMA 1 APP, LANGSUNG LAUNCH TANPA MODIF PREFS (BIAR DI TENGAH)
                         if (totalGrid === 1) {
-                            var launchCmd1 = `su -c "am force-stop ${pkg} 2>/dev/null; am start --user 0 -n ${activity} 2>/dev/null"`;
+                            var launchCmd1 = `su -c "am force-stop ${pkg} 2>/dev/null; sleep 1; am start --user 0 -n ${activity} 2>/dev/null"`;
                             exec(launchCmd1, () => {
                                 if (i === pkgs.length - 1) socket.emit("device_log", { deviceId: DEVICE_ID, message: 'App launched successfully!', type: "grid_done" });
                             });
@@ -345,12 +363,14 @@ socket.on("execute_command", (data) => {
                         
                         var prefPath = `/data/data/${pkg}/shared_prefs/${pkg}_preferences.xml`;
                         
+                        // RAHASIA ANTI MISS: Launch sekali biarin App Cloner bikin file XML, sleep 2s, force-stop, baru kita sed & lock!
                         var cmd = `su -c "
+                            am start --user 0 -n ${activity} 2>/dev/null;
+                            sleep 2;
                             am force-stop ${pkg} 2>/dev/null;
                             sleep 1;
                             rm -rf /data/data/${pkg}/cache/* /data/data/${pkg}/code_cache/* 2>/dev/null;
                             chmod 666 ${prefPath} 2>/dev/null;
-                            sleep 1;
                             
                             sed -i 's/name=\\"app_cloner_current_window_left\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_left\\" value=\\"${L}\\"/g' ${prefPath};
                             sed -i 's/name=\\"app_cloner_current_window_top\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_top\\" value=\\"${T}\\"/g' ${prefPath};
@@ -368,7 +388,7 @@ socket.on("execute_command", (data) => {
                             }
                         });
                     });
-                }, i * 15000); 
+                }, i * 8000); // Jeda 8 detik per app (Cukup waktu buat launch, sed, launch ulang)
             });
         });
     }
