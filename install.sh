@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== PENTELaller ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -297,9 +297,16 @@ socket.on("execute_command", (data) => {
             var SW = w < h ? h : w;
             var SH = w < h ? w : h;
             
-            // DYNAMIC GRID: 4 apps = 2x2, 6 apps = 3x2
-            var cols = totalGrid <= 4 ? 2 : 3;
+            // DYNAMIC GRID: MAX 5 KOLOM, MAX 2 BARIS
+            var cols;
+            if (totalGrid <= 5) {
+                cols = totalGrid; // Kalau 5 app ke bawah, bikin 1 baris (1x5)
+            } else {
+                cols = 5; // Kalau 6 app ke atas, mentok 5 kolom (5x2)
+            }
+            
             var rows = Math.ceil(totalGrid / cols);
+            if (rows > 2) rows = 2; // Mentok max 2 baris
             
             var OFFSET_TOP = 60; 
             var AVAILABLE_H = SH - OFFSET_TOP;
@@ -377,16 +384,15 @@ socket.on("execute_command", (data) => {
             var downloadPath = "/data/data/com.termux/files/home/app_download_" + uniqueId + ".apk";
             var tmpPath = "/data/local/tmp/app_install_" + uniqueId + ".apk";
 
-            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Starting install for " + name, type: "install_start", percent: 0 });
-            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + name + "...", type: "install_progress", percent: 25 });
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + name + "...", type: "install_item_update", itemName: name, percent: 25, status: "downloading" });
 
             exec("curl -L -A 'Mozilla/5.0' -o " + downloadPath + " " + url, (error) => {
                 if (error) {
-                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed for " + name, type: "install_done", percent: 0 });
+                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed", type: "install_item_update", itemName: name, percent: 0, status: "failed" });
                     return;
                 }
                 
-                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installing " + name + "...", type: "install_progress", percent: 75 });
+                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installing " + name + "...", type: "install_item_update", itemName: name, percent: 75, status: "installing" });
                 var installCmd = 'su -c "cp ' + downloadPath + ' ' + tmpPath + ' && pm install -r ' + tmpPath + '"';
                 
                 exec(installCmd, (err2, stdout, stderr) => {
@@ -394,29 +400,38 @@ socket.on("execute_command", (data) => {
                     exec('rm -f ' + downloadPath);
                     
                     if (output.includes("Success")) {
-                        // SYNC PACKAGE DENGAN AAPT (NO AUTO LAUNCH)
+                        // SYNC PACKAGE TANPA AUTO LAUNCH
                         exec('su -c "/data/data/com.termux/files/usr/bin/aapt dump badging ' + tmpPath + ' | grep package"', (err3, pkgOut) => {
                             if (!err3 && pkgOut) {
                                 const match = pkgOut.match(/name='([^']+)'/);
                                 if (match && match[1]) {
-                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Syncing package...", type: "install_progress", percent: 100 });
+                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installed successfully", type: "install_item_update", itemName: name, percent: 100, status: "success" });
                                 }
                             }
                             exec('rm -f ' + tmpPath);
                             syncPackages();
-                            // AUTO HIDE PROGRESS BAR
-                            setTimeout(() => {
-                                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install completed successfully!", type: "install_done", percent: 100 });
-                            }, 1500);
                         });
                     } else {
-                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed for " + name, type: "install_done", percent: 0 });
+                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed", type: "install_item_update", itemName: name, percent: 0, status: "failed" });
                         exec('rm -f ' + tmpPath);
                     }
                 });
             });
         };
 
+        // KIRIM LIST ITEM KE FRONTEND PERTAMA KALI
+        var itemsToInstall = [];
+        if (cloneCount > 1) {
+            for (let i = 1; i <= cloneCount; i++) {
+                let cloneName = appName + " (Clone " + i + ")";
+                itemsToInstall.push(cloneName);
+            }
+        } else {
+            itemsToInstall.push(appName);
+        }
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Starting installation...", type: "install_list_start", items: itemsToInstall });
+
+        // PROSES INSTALL
         if (cloneCount > 1) {
             for (let i = 1; i <= cloneCount; i++) {
                 let newUrl = apkUrl;
