@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+    echo -e "${RED}=== JEMMM ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -275,7 +275,7 @@ socket.on("execute_command", (data) => {
                         
                         var cmd = `su -c "am start --user 0 -n ${activity} 2>/dev/null"`;
                         exec(cmd, () => {
-                            console.log("[OPEN] ✓ " + pkg + " opened successfully!");
+                            console.log("[OPEN] " + pkg + " opened successfully!");
                         });
                     });
                 });
@@ -291,7 +291,7 @@ socket.on("execute_command", (data) => {
         pkgs.forEach((pkg, i) => {
             setTimeout(() => {
                 exec(`su -c "am force-stop ${pkg} && rm -rf /data/data/${pkg}/cache/* /data/data/${pkg}/code_cache/* 2>/dev/null"`, () => {
-                    console.log("[CLOSE] ✓ " + pkg + " closed & cache cleared!");
+                    console.log("[CLOSE] " + pkg + " closed & cache cleared!");
                 });
             }, i * 1500); // Jeda 1.5 detik per app
         });
@@ -365,23 +365,21 @@ socket.on("execute_command", (data) => {
                             var prefPath = `/data/data/${pkg}/shared_prefs/${pkg}_preferences.xml`;
                             
                             var cmd = `su -c "
-                                am start --user 0 -n ${activity} 2>/dev/null;
-                                sleep 2;
                                 am force-stop ${pkg} 2>/dev/null;
-                                sleep 1;
+                                rm -rf /data/data/${pkg}/cache/* /data/data/${pkg}/code_cache/* 2>/dev/null;
                                 chmod 666 ${prefPath} 2>/dev/null;
-                                
+
                                 sed -i 's/name=\\"app_cloner_current_window_left\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_left\\" value=\\"${L}\\"/g' ${prefPath};
                                 sed -i 's/name=\\"app_cloner_current_window_top\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_top\\" value=\\"${T}\\"/g' ${prefPath};
                                 sed -i 's/name=\\"app_cloner_current_window_right\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_right\\" value=\\"${R}\\"/g' ${prefPath};
                                 sed -i 's/name=\\"app_cloner_current_window_bottom\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_bottom\\" value=\\"${B}\\"/g' ${prefPath};
-                                
+
                                 chmod 444 ${prefPath} 2>/dev/null;
                                 am start --user 0 -n ${activity} 2>/dev/null
                             "`;
                             
                             exec(cmd, () => {
-                                console.log(`[GRID] ✓ ${pkg} gridded successfully!`);
+                                console.log(`[GRID] ${pkg} gridded successfully!`);
                                 if (i === pkgs.length - 1) {
                                     socket.emit("device_log", { deviceId: DEVICE_ID, message: 'All apps gridded successfully!', type: "grid_done" });
                                 }
