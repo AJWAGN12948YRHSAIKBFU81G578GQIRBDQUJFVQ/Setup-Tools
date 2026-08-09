@@ -71,12 +71,15 @@ const idFile = "device_id.txt";
 if (fs.existsSync(idFile)) {
     DEVICE_ID = fs.readFileSync(idFile, "utf8").trim();
 } else {
-    let model = getProp("ro.product.model") || "Unknown";
-    let serial = getProp("ro.serialno") || getProp("ro.boot.serialno") || "";
-    if (serial === "") {
-        serial = Math.floor(Math.random() * 9000 + 1000).toString();
+    let model = getProp("ro.product.model") || "RF";
+    // Pake Android ID biar stabil walaupun RF di-reboot
+    let androidId = "";
+    try {
+        androidId = execSync("su -c 'settings get secure android_id'").toString().trim();
+    } catch (e) {
+        androidId = Math.floor(Math.random() * 9000 + 1000).toString();
     }
-    DEVICE_ID = model + "-" + serial;
+    DEVICE_ID = model + "-" + androidId;
     fs.writeFileSync(idFile, DEVICE_ID);
 }
 
@@ -274,7 +277,7 @@ socket.on("execute_command", (data) => {
         
         var totalGrid = pkgs.length;
         console.log("[GRID] Starting Auto Grid for " + totalGrid + " apps...");
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Auto Grid started! Cleaning up...', type: "grid_start" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Initializing Auto Grid...', type: "grid_start" });
         
         exec('su -c "wm size"', (err, stdout) => {
             if (err) return;
@@ -285,8 +288,10 @@ socket.on("execute_command", (data) => {
             var SW = w < h ? h : w;
             var SH = w < h ? w : h;
             
+            // STRICT 2 KOLOM (2x2, 2x3, 2x4, 2x5)
             var cols = 2;
             var rows = Math.ceil(totalGrid / cols);
+            
             var OFFSET_TOP = 60; 
             var AVAILABLE_H = SH - OFFSET_TOP;
             var GW = Math.floor(SW / cols);
@@ -304,9 +309,8 @@ socket.on("execute_command", (data) => {
                     var prefPath = `/data/data/${pkg}/shared_prefs/${pkg}_preferences.xml`;
                     var activityName = `${pkg}/com.roblox.client.startup.ActivitySplash`;
                     
-                    // Emit Progress ke Web (Persentase)
                     var percent = Math.round(((i + 1) / totalGrid) * 100);
-                    var msg = `Processing ${pkg} (${i+1}/${totalGrid})`;
+                    var msg = `Gridding ${pkg} [${i+1}/${totalGrid}]`;
                     socket.emit("device_log", { deviceId: DEVICE_ID, message: msg, type: "grid_progress", percent: percent });
                     
                     var cmd = `su -c "
@@ -357,6 +361,7 @@ socket.on("execute_command", (data) => {
             var tmpPath = "/data/local/tmp/app_install_" + uniqueId + ".apk";
 
             console.log("[INSTALL] Downloading " + name + "...");
+            socket.emit("device_log", { deviceId: DEVICE_ID, message: "Starting install for " + name, type: "install_start", percent: 0 });
             socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + name + "...", type: "install_progress", percent: 25 });
 
             exec("curl -L -A 'Mozilla/5.0' -o " + downloadPath + " " + url, (error) => {
