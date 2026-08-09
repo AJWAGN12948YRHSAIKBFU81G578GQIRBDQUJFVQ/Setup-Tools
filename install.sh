@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== KATAK BEJIR ===${NC}"
+    echo -e "${RED}=== XXXXX ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -297,20 +297,22 @@ socket.on("execute_command", (data) => {
             var SW = w < h ? h : w;
             var SH = w < h ? w : h;
             
-            // LOGIC GRID BARU:
+            // LOGIC GRID SESUAI GAMBARAN LU:
             var cols, rows;
             if (totalGrid === 1) {
                 cols = 1; rows = 1; // 1 App: Biarin default di tengah (gak di-grid)
-            } else if (totalGrid <= 5) {
-                cols = totalGrid; rows = 2; // 2-5 App: Ngisi atas (bawah kosong)
-            } else {
-                cols = 5; rows = 2; // 6-10 App: Ngisi atas & bawah
-            }
+            } else if (totalGrid === 2) { cols = 2; rows = 1; } 
+            else if (totalGrid === 3) { cols = 3; rows = 1; } 
+            else if (totalGrid === 4) { cols = 2; rows = 2; } 
+            else if (totalGrid === 5) { cols = 5; rows = 1; } 
+            else if (totalGrid === 6) { cols = 3; rows = 2; } 
+            else if (totalGrid === 7 || totalGrid === 8) { cols = 4; rows = 2; } 
+            else { cols = 5; rows = 2; } // 9 & 10
             
             var OFFSET_TOP = 60; 
             var AVAILABLE_H = SH - OFFSET_TOP;
             var GW = Math.floor(SW / cols);
-            var GH = Math.floor(AVAILABLE_H / rows);
+            var GH = Math.floor(AVAILABLE_H / 2); // Tinggi selalu dibagi 2 (atas & bawah)
             
             pkgs.forEach((pkg, i) => {
                 setTimeout(() => {
