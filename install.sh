@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+    echo -e "${RED}=== PENTELaller ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -268,6 +268,16 @@ socket.on("execute_command", (data) => {
         });
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Opened ' + pkgs.length + ' packages successfully!', type: "success" });
     }    
+    else if (data.command === 'close_all_packages') {
+        var pkgs = data.payload.packages || [];
+        if (pkgs.length === 0) return;
+        
+        pkgs.forEach(pkg => {
+            exec('su -c "am force-stop ' + pkg + ' && rm -rf /data/data/' + pkg + '/cache/* /data/data/' + pkg + '/code_cache/*"', () => {});
+        });
+        
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Closed all packages & cleared cache!', type: "success" });
+    }
     else if (data.command === 'auto_grid') {
         var pkgs = data.payload.packages || [];
         if (pkgs.length === 0) {
@@ -276,7 +286,6 @@ socket.on("execute_command", (data) => {
         }
         
         var totalGrid = pkgs.length;
-        console.log("[GRID] Starting Auto Grid for " + totalGrid + " apps...");
         socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Initializing Auto Grid...', type: "grid_start" });
         
         exec('su -c "wm size"', (err, stdout) => {
@@ -288,8 +297,8 @@ socket.on("execute_command", (data) => {
             var SW = w < h ? h : w;
             var SH = w < h ? w : h;
             
-            // STRICT 2 KOLOM (2x2, 2x3, 2x4, 2x5)
-            var cols = 2;
+            // DYNAMIC GRID: 4 apps = 2x2, 6 apps = 3x2
+            var cols = totalGrid <= 4 ? 2 : 3;
             var rows = Math.ceil(totalGrid / cols);
             
             var OFFSET_TOP = 60; 
@@ -307,31 +316,39 @@ socket.on("execute_command", (data) => {
                     var B = ((row + 1) * GH) + OFFSET_TOP;
                     
                     var prefPath = `/data/data/${pkg}/shared_prefs/${pkg}_preferences.xml`;
-                    var activityName = `${pkg}/com.roblox.client.startup.ActivitySplash`;
                     
                     var percent = Math.round(((i + 1) / totalGrid) * 100);
                     var msg = `Gridding ${pkg} [${i+1}/${totalGrid}]`;
                     socket.emit("device_log", { deviceId: DEVICE_ID, message: msg, type: "grid_progress", percent: percent });
                     
-                    var cmd = `su -c "
-                        am force-stop ${pkg} 2>/dev/null;
-                        rm -rf /data/data/${pkg}/cache/* /data/data/${pkg}/code_cache/* 2>/dev/null;
-                        chmod 666 ${prefPath} 2>/dev/null;
-                        
-                        sed -i 's/name=\\"app_cloner_current_window_left\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_left\\" value=\\"${L}\\"/g' ${prefPath};
-                        sed -i 's/name=\\"app_cloner_current_window_top\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_top\\" value=\\"${T}\\"/g' ${prefPath};
-                        sed -i 's/name=\\"app_cloner_current_window_right\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_right\\" value=\\"${R}\\"/g' ${prefPath};
-                        sed -i 's/name=\\"app_cloner_current_window_bottom\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_bottom\\" value=\\"${B}\\"/g' ${prefPath};
-                        
-                        chmod 444 ${prefPath} 2>/dev/null;
-                        am start --user 0 -n ${activityName} 2>/dev/null
-                    "`;
-                    
-                    exec(cmd, () => {
-                        console.log(`[GRID] ✓ ${pkg} gridded successfully!`);
-                        if (i === pkgs.length - 1) {
-                            socket.emit("device_log", { deviceId: DEVICE_ID, message: 'All apps gridded successfully!', type: "grid_done" });
+                    // CARI ACTIVITY UTAMA SECARA OTOMATIS (SUPPORT ARCEUS/DELTA)
+                    exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (actErr, actOut) => {
+                        var activity = actOut ? actOut.trim() : "";
+                        if (actErr || !activity || activity.includes("Error")) {
+                            console.log("[GRID] " + pkg + " has no UI/Activity. Skipping...");
+                            return;
                         }
+                        
+                        var cmd = `su -c "
+                            am force-stop ${pkg} 2>/dev/null;
+                            rm -rf /data/data/${pkg}/cache/* /data/data/${pkg}/code_cache/* 2>/dev/null;
+                            chmod 666 ${prefPath} 2>/dev/null;
+                            
+                            sed -i 's/name=\\"app_cloner_current_window_left\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_left\\" value=\\"${L}\\"/g' ${prefPath};
+                            sed -i 's/name=\\"app_cloner_current_window_top\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_top\\" value=\\"${T}\\"/g' ${prefPath};
+                            sed -i 's/name=\\"app_cloner_current_window_right\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_right\\" value=\\"${R}\\"/g' ${prefPath};
+                            sed -i 's/name=\\"app_cloner_current_window_bottom\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_bottom\\" value=\\"${B}\\"/g' ${prefPath};
+                            
+                            chmod 444 ${prefPath} 2>/dev/null;
+                            am start --user 0 -n ${activity} 2>/dev/null
+                        "`;
+                        
+                        exec(cmd, () => {
+                            console.log(`[GRID] ✓ ${pkg} gridded successfully!`);
+                            if (i === pkgs.length - 1) {
+                                socket.emit("device_log", { deviceId: DEVICE_ID, message: 'All apps gridded successfully!', type: "grid_done" });
+                            }
+                        });
                     });
                 }, i * 15000); 
             });
@@ -360,19 +377,16 @@ socket.on("execute_command", (data) => {
             var downloadPath = "/data/data/com.termux/files/home/app_download_" + uniqueId + ".apk";
             var tmpPath = "/data/local/tmp/app_install_" + uniqueId + ".apk";
 
-            console.log("[INSTALL] Downloading " + name + "...");
             socket.emit("device_log", { deviceId: DEVICE_ID, message: "Starting install for " + name, type: "install_start", percent: 0 });
             socket.emit("device_log", { deviceId: DEVICE_ID, message: "Downloading " + name + "...", type: "install_progress", percent: 25 });
 
             exec("curl -L -A 'Mozilla/5.0' -o " + downloadPath + " " + url, (error) => {
                 if (error) {
-                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed for " + name, type: "install_progress", percent: 0 });
+                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Download failed for " + name, type: "install_done", percent: 0 });
                     return;
                 }
                 
-                console.log("[INSTALL] Installing " + name + "...");
                 socket.emit("device_log", { deviceId: DEVICE_ID, message: "Installing " + name + "...", type: "install_progress", percent: 75 });
-                
                 var installCmd = 'su -c "cp ' + downloadPath + ' ' + tmpPath + ' && pm install -r ' + tmpPath + '"';
                 
                 exec(installCmd, (err2, stdout, stderr) => {
@@ -380,35 +394,23 @@ socket.on("execute_command", (data) => {
                     exec('rm -f ' + downloadPath);
                     
                     if (output.includes("Success")) {
-                        console.log("[INSTALL] " + name + " installed successfully!");
-                        socket.emit("device_log", { deviceId: DEVICE_ID, message: name + " installed successfully!", type: "install_progress", percent: 100 });
-                        
-                        if (isExecutor) {
-                            exec('su -c "/data/data/com.termux/files/usr/bin/aapt dump badging ' + tmpPath + ' | grep package"', (err3, pkgOut) => {
-                                if (!err3 && pkgOut) {
-                                    const match = pkgOut.match(/name='([^']+)'/);
-                                    if (match && match[1]) {
-                                        const pkg = match[1];
-                                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Opening " + name + "...", type: "install_progress", percent: 100 });
-                                        exec('su -c "monkey -p ' + pkg + ' -c android.intent.category.LAUNCHER 1"', () => {
-                                            exec('rm -f ' + tmpPath);
-                                            syncPackages();
-                                        });
-                                    } else {
-                                        exec('rm -f ' + tmpPath);
-                                        syncPackages();
-                                    }
-                                } else {
-                                    exec('rm -f ' + tmpPath);
-                                    syncPackages();
+                        // SYNC PACKAGE DENGAN AAPT (NO AUTO LAUNCH)
+                        exec('su -c "/data/data/com.termux/files/usr/bin/aapt dump badging ' + tmpPath + ' | grep package"', (err3, pkgOut) => {
+                            if (!err3 && pkgOut) {
+                                const match = pkgOut.match(/name='([^']+)'/);
+                                if (match && match[1]) {
+                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Syncing package...", type: "install_progress", percent: 100 });
                                 }
-                            });
-                        } else {
+                            }
                             exec('rm -f ' + tmpPath);
                             syncPackages();
-                        }
+                            // AUTO HIDE PROGRESS BAR
+                            setTimeout(() => {
+                                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install completed successfully!", type: "install_done", percent: 100 });
+                            }, 1500);
+                        });
                     } else {
-                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed for " + name, type: "install_progress", percent: 0 });
+                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed for " + name, type: "install_done", percent: 0 });
                         exec('rm -f ' + tmpPath);
                     }
                 });
