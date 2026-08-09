@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== XXXXX ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -347,8 +347,10 @@ socket.on("execute_command", (data) => {
                         
                         var cmd = `su -c "
                             am force-stop ${pkg} 2>/dev/null;
+                            sleep 1;
                             rm -rf /data/data/${pkg}/cache/* /data/data/${pkg}/code_cache/* 2>/dev/null;
                             chmod 666 ${prefPath} 2>/dev/null;
+                            sleep 1;
                             
                             sed -i 's/name=\\"app_cloner_current_window_left\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_left\\" value=\\"${L}\\"/g' ${prefPath};
                             sed -i 's/name=\\"app_cloner_current_window_top\\" value=\\"[^\\"]*\\"/name=\\"app_cloner_current_window_top\\" value=\\"${T}\\"/g' ${prefPath};
