@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+    echo -e "${RED}=== AWIGWOGGG ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -297,16 +297,15 @@ socket.on("execute_command", (data) => {
             var SW = w < h ? h : w;
             var SH = w < h ? w : h;
             
-            // DYNAMIC GRID: MAX 5 KOLOM, MAX 2 BARIS
-            var cols;
-            if (totalGrid <= 5) {
-                cols = totalGrid; // Kalau 5 app ke bawah, bikin 1 baris (1x5)
+            // LOGIC GRID BARU:
+            var cols, rows;
+            if (totalGrid === 1) {
+                cols = 1; rows = 1; // 1 App: Biarin default di tengah (gak di-grid)
+            } else if (totalGrid <= 5) {
+                cols = totalGrid; rows = 2; // 2-5 App: Ngisi atas (bawah kosong)
             } else {
-                cols = 5; // Kalau 6 app ke atas, mentok 5 kolom (5x2)
+                cols = 5; rows = 2; // 6-10 App: Ngisi atas & bawah
             }
-            
-            var rows = Math.ceil(totalGrid / cols);
-            if (rows > 2) rows = 2; // Mentok max 2 baris
             
             var OFFSET_TOP = 60; 
             var AVAILABLE_H = SH - OFFSET_TOP;
@@ -322,19 +321,27 @@ socket.on("execute_command", (data) => {
                     var R = (col + 1) * GW;
                     var B = ((row + 1) * GH) + OFFSET_TOP;
                     
-                    var prefPath = `/data/data/${pkg}/shared_prefs/${pkg}_preferences.xml`;
-                    
                     var percent = Math.round(((i + 1) / totalGrid) * 100);
                     var msg = `Gridding ${pkg} [${i+1}/${totalGrid}]`;
                     socket.emit("device_log", { deviceId: DEVICE_ID, message: msg, type: "grid_progress", percent: percent });
                     
-                    // CARI ACTIVITY UTAMA SECARA OTOMATIS (SUPPORT ARCEUS/DELTA)
                     exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (actErr, actOut) => {
                         var activity = actOut ? actOut.trim() : "";
                         if (actErr || !activity || activity.includes("Error")) {
                             console.log("[GRID] " + pkg + " has no UI/Activity. Skipping...");
                             return;
                         }
+                        
+                        // KALAU CUMA 1 APP, LANGSUNG LAUNCH TANPA MODIF PREFS (BIAR DI TENGAH)
+                        if (totalGrid === 1) {
+                            var launchCmd1 = `su -c "am force-stop ${pkg} 2>/dev/null; am start --user 0 -n ${activity} 2>/dev/null"`;
+                            exec(launchCmd1, () => {
+                                if (i === pkgs.length - 1) socket.emit("device_log", { deviceId: DEVICE_ID, message: 'App launched successfully!', type: "grid_done" });
+                            });
+                            return;
+                        }
+                        
+                        var prefPath = `/data/data/${pkg}/shared_prefs/${pkg}_preferences.xml`;
                         
                         var cmd = `su -c "
                             am force-stop ${pkg} 2>/dev/null;
