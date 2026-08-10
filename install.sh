@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
+    echo -e "${RED}=== AWIGGGG ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -104,8 +104,9 @@ try {
 } catch (e) {}
 
 socket.on("connect", () => {
-    console.log("[✓] Connected to Dashboard!");
+    console.log("Connected to Dashboard!");
     socket.emit("device_connect", { ip: "Cloud Phone", maxPackages: 10 });
+    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device connected to dashboard", type: "success" });
     syncPackages();
 });
 
@@ -131,6 +132,9 @@ const syncPackages = () => {
                 return currentPrefixes.some(prefix => pkg.toLowerCase().startsWith(prefix.toLowerCase()));
             });
             console.log("[SYNC] Found " + matchedPkgs.length + " packages matching prefix.");
+            if (matchedPkgs.length > 0) {
+                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Found " + matchedPkgs.length + " packages", type: "success" });
+            }
             socket.emit("sync_packages", { deviceId: DEVICE_ID, packages: matchedPkgs });
         }
     });
@@ -440,6 +444,8 @@ socket.on("execute_command", (data) => {
                             exec('rm -f ' + tmpPath);
                             syncPackages();
                         });
+                        console.log("[INSTALL] " + name + " installed successfully!");
+                        socket.emit("device_log", { deviceId: DEVICE_ID, message: name + " installed successfully!", type: "success" });
                     } else {
                         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed", type: "install_item_update", itemName: name, percent: 0, status: "failed" });
                         exec('rm -f ' + tmpPath);
