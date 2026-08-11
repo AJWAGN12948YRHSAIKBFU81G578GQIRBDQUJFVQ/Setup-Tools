@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== AWIGGGG ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -106,7 +106,7 @@ try {
 socket.on("connect", () => {
     console.log("Connected to Dashboard!");
     socket.emit("device_connect", { ip: "Cloud Phone", maxPackages: 10 });
-    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device connected to dashboard", type: "success" });
+    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device " + DEVICE_ID + " has successfully connected to dashboard", type: "success" });
     syncPackages();
 });
 
@@ -133,7 +133,7 @@ const syncPackages = () => {
             });
             console.log("[SYNC] Found " + matchedPkgs.length + " packages matching prefix.");
             if (matchedPkgs.length > 0) {
-                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Found " + matchedPkgs.length + " packages", type: "success" });
+                socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device " + DEVICE_ID + " found " + matchedPkgs.length + " packages", type: "success" });
             }
             socket.emit("sync_packages", { deviceId: DEVICE_ID, packages: matchedPkgs });
         }
@@ -251,11 +251,11 @@ socket.on("execute_command", (data) => {
         // 7. BERSIHKAN SHORTCUT IKLAN DI HOME SCREEN (LAUNCHER)
         exec('su -c "pm clear com.android.launcher3"', () => {});
         
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Device wiped clean! All apps & files removed.', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device " + DEVICE_ID + " has been wiped clean", type: "success" });
         console.log("[CMD] Successfully Cleaning Device");
     } 
     else if (data.command === 'reboot_device') {
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Rebooting device...', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device " + DEVICE_ID + " is rebooting", type: "success" });
         runCmd('su -c "reboot"');
     }    
     else if (data.command === 'open_all_packages') {
@@ -286,7 +286,7 @@ socket.on("execute_command", (data) => {
             }, i * 6000);
         });
         
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Opened ' + pkgs.length + ' packages successfully!', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device " + DEVICE_ID + " opened " + pkgs.length + " packages", type: "success" });
     }
     else if (data.command === 'close_all_packages') {
         var pkgs = data.payload.packages || [];
@@ -300,7 +300,7 @@ socket.on("execute_command", (data) => {
             }, i * 1500); // Jeda 1.5 detik per app
         });
         
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Closed all packages & cleared cache!', type: "success" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device " + DEVICE_ID + " closed all packages", type: "success" });
     }
     else if (data.command === 'auto_grid') {
         var pkgs = data.payload.packages || [];
@@ -310,7 +310,7 @@ socket.on("execute_command", (data) => {
         }
         
         var totalGrid = pkgs.length;
-        socket.emit("device_log", { deviceId: DEVICE_ID, message: 'Initializing Auto Grid...', type: "grid_start" });
+        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device " + DEVICE_ID + " is executing Auto Grid", type: "grid_start" });
         
         exec('su -c "wm size"', (err, stdout) => {
             if (err) return;
@@ -385,7 +385,7 @@ socket.on("execute_command", (data) => {
                             exec(cmd, () => {
                                 console.log(`[GRID] ${pkg} gridded successfully!`);
                                 if (i === pkgs.length - 1) {
-                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: 'All apps gridded successfully!', type: "grid_done" });
+                                    socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device " + DEVICE_ID + " finished Auto Grid", type: "grid_done" });
                                 }
                             });
                         });
@@ -445,7 +445,7 @@ socket.on("execute_command", (data) => {
                             syncPackages();
                         });
                         console.log("[INSTALL] " + name + " installed successfully!");
-                        socket.emit("device_log", { deviceId: DEVICE_ID, message: name + " installed successfully!", type: "success" });
+                        socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device " + DEVICE_ID + " installed " + name + " successfully", type: "success" });
                     } else {
                         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Install failed", type: "install_item_update", itemName: name, percent: 0, status: "failed" });
                         exec('rm -f ' + tmpPath);
