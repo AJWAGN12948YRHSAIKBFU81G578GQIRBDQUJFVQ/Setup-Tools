@@ -7,7 +7,7 @@ NC='\033[0m'
 LICENSE_KEY=$1
 
 if [ -z "$LICENSE_KEY" ]; then
-    echo -e "${RED}=== wkwkwk ===${NC}"
+    echo -e "${RED}=== Tinkerbell Bridge Installer ===${NC}"
     echo "Please enter your License Key from the Dashboard:"
     read -p "Key: " LICENSE_KEY < /dev/tty
 fi
@@ -47,13 +47,11 @@ cd tinkerbell-bridge
 npm init -y > /dev/null 2>&1
 npm install socket.io-client > /dev/null 2>&1
 
-# PAKAI 'EOF' (KUTIP SATU) SUPAYA BASH GAK MERUSAK KODE NODE.JS LU!
 cat << 'EOF' > bridge.js
 const { io } = require("socket.io-client");
 const { exec, execSync } = require("child_process");
 const fs = require("fs");
 
-// AMBIL URL & KEY DARI ARGUMENT (100% AMAN DARI BASH)
 const VPS_URL = process.argv[2]; 
 const LICENSE_KEY = process.argv[3];
 
@@ -72,7 +70,6 @@ if (fs.existsSync(idFile)) {
     DEVICE_ID = fs.readFileSync(idFile, "utf8").trim();
 } else {
     let model = getProp("ro.product.model") || "RF";
-    // Pake Android ID biar stabil walaupun RF di-reboot
     let androidId = "";
     try {
         androidId = execSync("su -c 'settings get secure android_id'").toString().trim();
@@ -92,7 +89,6 @@ const socket = io(VPS_URL, {
     auth: { licenseKey: LICENSE_KEY, deviceId: DEVICE_ID }
 });
 
-// PREFIX FILTER DEFAULT
 let currentPrefixes = ['com.roblox'];
 try {
     if (fs.existsSync('prefix.txt')) {
@@ -146,7 +142,6 @@ socket.on("execute_command", (data) => {
     if (data.command === 'clean_device') {
         console.log("[CMD] Cleaning Device...");
         
-        // 0. WAJIB: ENABLE BALIK PACKAGE SISTEM YANG KEDISABLE DARI CODE LAMA (FIX CRASH APP INFO)
         exec('su -c "pm enable com.android.permissioncontroller"', () => {});
         exec('su -c "pm enable com.android.packageinstaller"', () => {});
         exec('su -c "pm enable com.android.providers.telephony"', () => {});
@@ -154,83 +149,40 @@ socket.on("execute_command", (data) => {
         exec('su -c "pm enable com.android.providers.downloads"', () => {});
         exec('su -c "pm enable com.android.networkstack"', () => {});
         
-        // 1. FORCE ENABLE DEVELOPER OPTIONS (Silent)
         exec('su -c "settings put global development_settings_enabled 1"', () => {});
         exec('su -c "settings put global enable_freeform_support 1"', () => {});
         exec('su -c "settings put global force_resizable_activities 1"', () => {});
         exec('su -c "settings put global allow_non_resizable_multi_window 1"', () => {});
         exec('su -c "wm density 192"', () => {});
         
-        // 2. LIST BLOATWARE YANG AMAN DI-UNINSTALL/DISABLE
         const apps = [
-            "com.android.tools",               // Tools RF
-            "com.android.toolkit",             // Toolbox RF
-            "com.android.adbkeyboard",         // Tobitx / ADB Keyboard RF
-            "com.android.chrome",              
-            "com.android.vending",             
-            "com.android.market",
-            "com.google.android.play.games",
-            "com.google.android.apps.nbu.files",
-            "com.android.contacts",
-            "com.android.messaging",
-            "com.android.mms.service",
-            "com.android.dialer",
-            "com.android.calendar",
-            "com.android.deskclock",           
-            "com.android.gallery3d",
-            "com.android.music",
-            "com.android.musicfx",
-            "com.android.soundrecorder",
-            "com.android.email",
-            "com.android.quicksearchbox",
-            "com.android.egg",                 
-            "com.android.printspooler",
-            "com.android.bips",
-            "com.android.printservice.recommendation",
-            "com.android.dreams.basic",        
-            "com.android.dreams.phototable",
-            "com.android.bluetoothmidiservice",
-            "com.android.bluetooth",
-            "com.android.nfc",
-            "com.android.providers.downloads.ui",
-            "com.android.hotspot2",
-            "com.android.bookmarkprovider",
-            "com.android.cellbroadcastreceiver",
-            "com.android.emergency",
-            "com.android.ons",
-            "com.android.simappdialog",
-            "com.android.carrierconfig",
-            "com.android.carrierdefaultapp",
-            "com.android.networkstack.permissionconfig",
-            "com.android.captiveportallogin",
-            "com.android.localtransport",
-            "com.android.proxyhandler",
-            "com.android.sharedstoragebackup",
-            "com.android.statementservice",
-            "com.android.calllogbackup",
-            "com.android.backupconfirm",
-            "com.android.providers.userdictionary",
+            "com.android.tools", "com.android.toolkit", "com.android.adbkeyboard", "com.android.chrome", 
+            "com.android.vending", "com.android.market", "com.google.android.play.games", "com.google.android.apps.nbu.files",
+            "com.android.contacts", "com.android.messaging", "com.android.mms.service", "com.android.dialer",
+            "com.android.calendar", "com.android.deskclock", "com.android.gallery3d", "com.android.music",
+            "com.android.musicfx", "com.android.soundrecorder", "com.android.email", "com.android.quicksearchbox",
+            "com.android.egg", "com.android.printspooler", "com.android.bips", "com.android.printservice.recommendation",
+            "com.android.dreams.basic", "com.android.dreams.phototable", "com.android.bluetoothmidiservice", "com.android.bluetooth",
+            "com.android.nfc", "com.android.providers.downloads.ui", "com.android.hotspot2", "com.android.bookmarkprovider",
+            "com.android.cellbroadcastreceiver", "com.android.emergency", "com.android.ons", "com.android.simappdialog",
+            "com.android.carrierconfig", "com.android.carrierdefaultapp", "com.android.networkstack.permissionconfig",
+            "com.android.captiveportallogin", "com.android.localtransport", "com.android.proxyhandler", "com.android.sharedstoragebackup",
+            "com.android.statementservice", "com.android.calllogbackup", "com.android.backupconfirm", "com.android.providers.userdictionary",
             "com.android.providers.blockednumber"
         ];
         
-        // 3. LIST APPS YANG CUMA BOLEH DI-DISABLE (JANGAN DI-UNINSTALL)
         const disableOnly = [
-            "com.google.android.gms",                  // Google Play Services
-            "com.android.inputmethod.latin",           // Android Keyboard (AOSP)
-            "com.google.android.inputmethod.latin"     // Gboard
+            "com.google.android.gms", "com.android.inputmethod.latin", "com.google.android.inputmethod.latin"
         ];
         
-        // LOOPING: COBA UNINSTALL, KALO GAGAL LANGSUNG DISABLE
         apps.forEach(pkg => {
             exec('su -c "pm uninstall --user 0 ' + pkg + ' 2>/dev/null || pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
         });
         
-        // LOOPING DISABLE ONLY (Paksa disable tanpa uninstall)
         disableOnly.forEach(pkg => {
             exec('su -c "pm disable-user --user 0 ' + pkg + ' 2>/dev/null"', () => {});
         });
 
-        // 4. UNINSTALL SEMUA APP PIHAK KETIGA (-3) KECUALI TERMUX (PAKE NODEJS LOOP)
         exec('su -c "pm list packages -3"', (err, stdout) => {
             if (!err && stdout) {
                 stdout.trim().split('\n').forEach(pkgLine => {
@@ -242,17 +194,11 @@ socket.on("execute_command", (data) => {
             }
         });
         
-        // 5. WIPE SEMUA FILE SAMPAH DI PENYIMPANAN INTERNAL (Download, APK, Bot files, dll)
         exec('su -c "rm -rf /sdcard/* /storage/emulated/0/* /data/local/tmp/*"', () => {});
-        
-        // 6. BERSIHKAN CACHE SISTEM BIAR RAM SEGAR KAYAK BARU BELI
         exec('su -c "rm -rf /data/dalvik-cache/*"', () => {});
-        
-        // 7. BERSIHKAN SHORTCUT IKLAN DI HOME SCREEN (LAUNCHER)
         exec('su -c "pm clear com.android.launcher3"', () => {});
         
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device " + DEVICE_ID + " has been wiped clean", type: "success" });
-        console.log("[CMD] Successfully Cleaning Device");
     } 
     else if (data.command === 'reboot_device') {
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device " + DEVICE_ID + " is rebooting", type: "success" });
@@ -268,7 +214,6 @@ socket.on("execute_command", (data) => {
         
         pkgs.forEach((pkg, i) => {
             setTimeout(() => {
-                // FRESH STATE: FORCE STOP & CLEAR CACHE TANPA SLEEP
                 exec(`su -c "am force-stop ${pkg} && rm -rf /data/data/${pkg}/cache/* /data/data/${pkg}/code_cache/* 2>/dev/null"`, () => {
                     exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (err, actOut) => {
                         var activity = actOut ? actOut.trim() : "";
@@ -297,7 +242,7 @@ socket.on("execute_command", (data) => {
                 exec(`su -c "am force-stop ${pkg} && rm -rf /data/data/${pkg}/cache/* /data/data/${pkg}/code_cache/* 2>/dev/null"`, () => {
                     console.log("[CLOSE] " + pkg + " closed & cache cleared!");
                 });
-            }, i * 1500); // Jeda 1.5 detik per app
+            }, i * 1500); 
         });
         
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Device " + DEVICE_ID + " closed all packages", type: "success" });
@@ -346,10 +291,9 @@ socket.on("execute_command", (data) => {
                     var B = ((row + 1) * GH) + OFFSET_TOP;
                     
                     var percent = Math.round(((i + 1) / totalGrid) * 100);
-                    var msg = `Device ${DEVICE_ID} is gridding ${pkg} [${i+1}/${totalGrid}]`;
+                    var msg = `Gridding ${pkg} [${i+1}/${totalGrid}]`;
                     socket.emit("device_log", { deviceId: DEVICE_ID, message: msg, type: "grid_progress", percent: percent });
                     
-                    // FRESH STATE: FORCE STOP & CLEAR CACHE TANPA SLEEP
                     exec(`su -c "am force-stop ${pkg} && rm -rf /data/data/${pkg}/cache/* /data/data/${pkg}/code_cache/* 2>/dev/null"`, () => {
                         exec('su -c "cmd package resolve-activity --brief ' + pkg + ' | tail -n 1"', (actErr, actOut) => {
                             var activity = actOut ? actOut.trim() : "";
@@ -433,7 +377,6 @@ socket.on("execute_command", (data) => {
                     exec('rm -f ' + downloadPath);
                     
                     if (output.includes("Success")) {
-                        // SYNC PACKAGE TANPA AUTO LAUNCH
                         exec('su -c "/data/data/com.termux/files/usr/bin/aapt dump badging ' + tmpPath + ' | grep package"', (err3, pkgOut) => {
                             if (!err3 && pkgOut) {
                                 const match = pkgOut.match(/name='([^']+)'/);
@@ -454,7 +397,6 @@ socket.on("execute_command", (data) => {
             });
         };
 
-        // KIRIM LIST ITEM KE FRONTEND PERTAMA KALI
         var itemsToInstall = [];
         if (cloneCount > 1) {
             for (let i = 1; i <= cloneCount; i++) {
@@ -466,7 +408,6 @@ socket.on("execute_command", (data) => {
         }
         socket.emit("device_log", { deviceId: DEVICE_ID, message: "Starting installation...", type: "install_list_start", items: itemsToInstall });
 
-        // PROSES INSTALL
         if (cloneCount > 1) {
             for (let i = 1; i <= cloneCount; i++) {
                 let newUrl = apkUrl;
@@ -503,7 +444,7 @@ socket.on("license_revoked", () => {
     console.log("[!] License revoked by server. Stopping bridge...");
     socket.emit("device_log", { deviceId: DEVICE_ID, message: 'License revoked. Disconnecting...', type: "error" });
     setTimeout(() => {
-        process.exit(1); // Bunuh proses Node.js di Termux
+        process.exit(1); 
     }, 1000);
 });
 
